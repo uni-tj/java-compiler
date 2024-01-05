@@ -1,64 +1,60 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
+
+module AST where
 import           Core
 
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
   { cvisibility :: Visibility
-  -- not required
-  , cabstract   :: Bool
   , cname       :: ClassName
   -- not required
   , cextends    :: ClassName
-  -- not required
-  , cimplements :: [InterfaceName]
   , cfields     :: [Field]
   , cmethods    :: [Method]
   }
 
 data Field = Field
-  { ftype :: TypeName
+  { ftype :: Type
   , fname :: FieldName
   , finit :: Maybe Expr
   }
 data Method = Method
   { mvisibility :: Visibility
-  , mtype       :: TypeName
+  , mtype       :: Type
   , mstatic     :: Bool
-  -- not required
-  , mabstract   :: Bool
   , mname       :: FieldName
-  , mparams     :: [(TypeName, LocalName)]
-  -- mbody == Nothing <=> mabstract == true, so no checks required if abstract not implemented
-  , mbody       :: Maybe Stmt
+  , mparams     :: [(Type, LocalName)]
+  , mbody       :: Stmt
   }
 
 data Stmt
   = Block [Stmt]
   | Return Expr
   | While Expr Stmt
-  | LocalVarDecl TypeName LocalName (Maybe Expr)
+  | LocalVarDecl Type LocalName (Maybe Expr)
   | If Expr Stmt (Maybe Stmt)
   | StmtOrExprAsStmt StmtOrExpr
 
 data StmtOrExpr
   = Assign Expr Expr
   | New ClassName [Expr]
-  | MethodCall Expr [Expr]
+  | MethodCall Expr MethodName [Expr]
 
 data Expr
   = This
   | Super
-  | LocalOrFieldVar LocalOrFieldName
-  | InstVar Expr FieldName
+  | Name LocalOrFieldOrClassName
+  | FieldAccess Expr FieldName
   | Unary UnOparator Expr
   | Binary BinOperator Expr Expr
-  | Integer Integer
-  | Bool Bool
-  | Char Char
-  | String String
-  | Null
+  | Literal Literal
   | StmtOrExprAsExpr StmtOrExpr
+data Literal
+  = IntLit Integer
+  | CharLit Char
+  | BoolLit Bool
+  | Null
 
 type Program = [Class]

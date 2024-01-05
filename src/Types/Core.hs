@@ -2,11 +2,19 @@ module Core where
 
 type Identifier = String
 type ClassName = Identifier
-type InterfaceName = Identifier
 type FieldName = Identifier
+type MethodName = Identifier
 type LocalName = Identifier
-type LocalOrFieldName = Identifier
-type TypeName = Identifier
+type LocalOrFieldOrClassName = Identifier
+data Type
+  = Int
+  | Char
+  | Bool
+  | Void
+  | Class ClassName
+  | NullType
+  | StaticClass ClassName
+  | StringArr -- to support main method
 
 data Visibility = Public | Private | Package
 
