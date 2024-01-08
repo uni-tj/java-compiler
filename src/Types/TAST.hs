@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
 
-module TAST where
-import           Core
+module Types.TAST where
+import           Types.Core
 
 {- Using "record syntax" for better readability and extensibility
 -}

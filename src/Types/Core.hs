@@ -1,4 +1,4 @@
-module Core where
+module Types.Core where
 
 type Identifier = String
 type ClassName = Identifier

@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
 
-module AST where
-import           Core
+module Types.AST where
+import           Types.Core
 
 {- Using "record syntax" for better readability and extensibility
 -}
