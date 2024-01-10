@@ -11,6 +11,10 @@ description: Please see the README
 
 dependencies:
   - base >= 4.7 && < 5
+  - bytestring
+  - mtl
+  - containers
+  - binary
 
 ghc-options:
   - -Wall
