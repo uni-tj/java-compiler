@@ -37,7 +37,7 @@ data Method = Method
 
 data Stmt
   = Block Position [Stmt]
-  | Return Position Expr
+  | Return Position (Maybe Expr)
   | While Position Expr Stmt
   | LocalVarDecl Position Type LocalName (Maybe Expr)
   | If Position Expr Stmt (Maybe Stmt)

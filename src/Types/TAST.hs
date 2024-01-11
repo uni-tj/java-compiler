@@ -38,7 +38,7 @@ data Method = Method
 {- DISCUSSION: remove types from statements or how to interpret type of statements? -}
 data Stmt
   = Block [Stmt]
-  | Return Expr
+  | Return (Maybe Expr)
   | While Expr Stmt
   | LocalVarDecl Type LocalName (Maybe Expr)
   | If Expr Stmt (Maybe Stmt)

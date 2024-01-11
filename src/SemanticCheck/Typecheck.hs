@@ -8,7 +8,7 @@ import           Control.Monad.Except (Except, MonadError (throwError))
 import           Data.List            (find, nub)
 import           Data.List.NonEmpty   (unzip)
 import           Data.Map
-import           Data.Maybe           (fromJust, fromMaybe)
+import           Data.Maybe           (fromJust, fromMaybe, isJust)
 import           Prelude              hiding (EQ, GT, LT, unzip)
 import qualified Types.AST            as AST
 import           Types.Core           (BinOperator (..), Identifier, Type (..),
@@ -112,7 +112,7 @@ checkConstructor _ _ AST.Method{ AST.mtype, AST.mname, AST.mbody } = do
   checkReturn mbody
   where checkReturn :: AST.Stmt -> Excepting ()
         checkReturn (AST.Block _ stmts) = forM_ stmts checkReturn
-        checkReturn (AST.Return pos _) = throwError $ "Unexpected return value at " ++ show pos
+        checkReturn (AST.Return pos mexpr) = when (isJust mexpr) $ throwError ("Unexpected return value at " ++ show pos)
         checkReturn (AST.While _ _ stmt) = checkReturn stmt
         checkReturn (AST.LocalVarDecl {}) = return ()
         checkReturn (AST.If _ _ stmt1 mstmt2) = checkReturn stmt1 >> forM_ mstmt2 checkReturn
@@ -138,11 +138,12 @@ checkStmt ctx target (AST.Block blockPos (stmt:stmts)) = do
   liftBool ("Unreachable code: " ++ show stmts' ++ ".") $
     defReturn && not (Prelude.null stmts)
   return (TAST.Block (stmt':stmts'), defReturn || defReturns)
-checkStmt ctx target (AST.Return _ expr) = do
-  expr' <- checkExpr ctx expr
-  liftBool ("Expected " ++ show expr' ++ " to match return type " ++ show target ++ ".") $
-    typee expr' <: target
-  return (TAST.Return expr', True)
+checkStmt ctx target (AST.Return pos mexpr) = do
+  mexpr' <- mapM (checkExpr ctx) mexpr
+  case mexpr' of
+    Nothing -> liftBool ("Missing return value at " ++ show pos) $ Void <: target
+    Just expr' -> liftBool ("Expected " ++ show expr' ++ " to match return type " ++ show target ++ ".") $ typee expr' <: target
+  return (TAST.Return mexpr', True)
 checkStmt ctx target (AST.While _ cond body) = do
   cond' <- checkExpr ctx cond
   liftBool ("Expected while condition " ++ show cond' ++ " to have type bool") $
