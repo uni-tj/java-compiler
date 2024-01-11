@@ -1,54 +1,44 @@
-cabal-version: 2.2
+cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
 name:           JavaCompiler
-version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/JavaCompiler#readme>
-homepage:       https://github.com/githubuser/JavaCompiler#readme
-bug-reports:    https://github.com/githubuser/JavaCompiler/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2024 Author name here
-license:        BSD-3-Clause
-license-file:   LICENSE
+version:        0.0.0
+description:    Please see the README
+homepage:       https://github.com/github.com/uni-tj#readme
+bug-reports:    https://github.com/github.com/uni-tj/issues
 build-type:     Simple
 extra-source-files:
     README.md
-    CHANGELOG.md
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/JavaCompiler
+  location: https://github.com/github.com/uni-tj
+  subdir: java-compiler
 
 library
   exposed-modules:
-      Lib
+      Jvm
   other-modules:
-      Paths_JavaCompiler
-  autogen-modules:
+      ByteCodeGen.ByteCodeGen
+      ByteCodeGen.Jvm.BinaryClass
+      ByteCodeGen.Jvm.Data.ClassFormat
+      SemanticCheck.Typecheck
+      Types.AST
+      Types.Core
+      Types.TAST
       Paths_JavaCompiler
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
-  default-language: Haskell2010
-
-executable JavaCompiler-exe
-  main-is: Main.hs
-  other-modules:
-      Paths_JavaCompiler
-  autogen-modules:
-      Paths_JavaCompiler
-  hs-source-dirs:
-      app
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      JavaCompiler
-    , base >=4.7 && <5
+    , binary
+    , bytestring
+    , containers
+    , mtl
   default-language: Haskell2010
 
 test-suite JavaCompiler-test
@@ -56,12 +46,14 @@ test-suite JavaCompiler-test
   main-is: Spec.hs
   other-modules:
       Paths_JavaCompiler
-  autogen-modules:
-      Paths_JavaCompiler
   hs-source-dirs:
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       JavaCompiler
     , base >=4.7 && <5
+    , binary
+    , bytestring
+    , containers
+    , mtl
   default-language: Haskell2010
