@@ -14,12 +14,15 @@ data Class = Class
   , cfields     :: [Field]
   , cmethods    :: [Method]
   }
+  deriving (Show, Eq, Ord)
 
 data Field = Field
-  { ftype :: Type
-  , fname :: FieldName
-  , finit :: Maybe Expr
+  { ftype   :: Type
+  , fstatic :: Bool
+  , fname   :: FieldName
+  , finit   :: Maybe Expr
   }
+  deriving (Show, Eq, Ord)
 data Method = Method
   { mvisibility :: Visibility
   , mtype       :: Type
@@ -28,19 +31,23 @@ data Method = Method
   , mparams     :: [(Type, LocalName)]
   , mbody       :: Stmt
   }
+  deriving (Show, Eq, Ord)
 
+{- DISCUSSION: remove types from statements or how to interpret type of statements? -}
 data Stmt
-  = Block Type [Stmt]
-  | Return Type Expr
-  | While Type Expr Stmt
-  | LocalVarDecl Type Type LocalName (Maybe Expr)
-  | If Type Expr Stmt (Maybe Stmt)
-  | StmtOrExprAsStmt Type StmtOrExpr
+  = Block [Stmt]
+  | Return Expr
+  | While Expr Stmt
+  | LocalVarDecl Type LocalName (Maybe Expr)
+  | If Expr Stmt (Maybe Stmt)
+  | StmtOrExprAsStmt StmtOrExpr
+  deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = Assign Type Expr Expr
-  | New Type ClassName [Expr]
-  | MethodCall Type Expr MethodName [Expr]
+  = Assign (Maybe Expr) LocalOrFieldName Expr
+  | New ClassName [Expr]
+  | MethodCall (Maybe Expr) MethodName [Expr]
+  deriving (Show, Eq, Ord)
 
 data Expr
   = This Type
@@ -51,9 +58,12 @@ data Expr
   | Binary Type BinOperator Expr Expr
   | Literal Type Literal
   | StmtOrExprAsExpr Type StmtOrExpr
+  deriving (Show, Eq, Ord)
 data Literal
-  = IntLit Type Integer
-  | CharLit Type Char
-  | BoolLit Type Bool
-  | Null Type
+  = IntLit Integer
+  | CharLit Char
+  | BoolLit Bool
+  | Null
+  deriving (Show, Eq, Ord)
 
+type Program = [Class]
