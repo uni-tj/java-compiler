@@ -14,12 +14,15 @@ data Class = Class
   , cfields     :: [Field]
   , cmethods    :: [Method]
   }
+  deriving (Show, Eq, Ord)
 
 data Field = Field
-  { ftype :: Type
-  , fname :: FieldName
-  , finit :: Maybe Expr
+  { ftype   :: Type
+  , fstatic :: Bool
+  , fname   :: FieldName
+  , finit   :: Maybe Expr
   }
+  deriving (Show, Eq, Ord)
 data Method = Method
   { mvisibility :: Visibility
   , mtype       :: Type
@@ -28,6 +31,7 @@ data Method = Method
   , mparams     :: [(Type, LocalName)]
   , mbody       :: Stmt
   }
+  deriving (Show, Eq, Ord)
 
 data Stmt
   = Block [Stmt]
@@ -36,11 +40,13 @@ data Stmt
   | LocalVarDecl Type LocalName (Maybe Expr)
   | If Expr Stmt (Maybe Stmt)
   | StmtOrExprAsStmt StmtOrExpr
+  deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = Assign Expr Expr
+  = Assign (Maybe Expr) LocalOrFieldName Expr
   | New ClassName [Expr]
-  | MethodCall Expr MethodName [Expr]
+  | MethodCall (Maybe Expr) MethodName [Expr]
+  deriving (Show, Eq, Ord)
 
 data Expr
   = This
@@ -51,10 +57,12 @@ data Expr
   | Binary BinOperator Expr Expr
   | Literal Literal
   | StmtOrExprAsExpr StmtOrExpr
+  deriving (Show, Eq, Ord)
 data Literal
   = IntLit Integer
   | CharLit Char
   | BoolLit Bool
   | Null
+  deriving (Show, Eq, Ord)
 
 type Program = [Class]
