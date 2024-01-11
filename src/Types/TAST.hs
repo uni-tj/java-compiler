@@ -4,6 +4,8 @@
 module Types.TAST where
 import           Types.Core
 
+type Program = [Class]
+
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
@@ -65,5 +67,3 @@ data Literal
   | BoolLit Bool
   | Null
   deriving (Show, Eq, Ord)
-
-type Program = [Class]

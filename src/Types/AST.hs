@@ -4,6 +4,8 @@
 module Types.AST where
 import           Types.Core
 
+type Program = [Class]
+
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
@@ -34,12 +36,12 @@ data Method = Method
   deriving (Show, Eq, Ord)
 
 data Stmt
-  = Block [Stmt]
-  | Return Expr
-  | While Expr Stmt
-  | LocalVarDecl Type LocalName (Maybe Expr)
-  | If Expr Stmt (Maybe Stmt)
-  | StmtOrExprAsStmt StmtOrExpr
+  = Block Position [Stmt]
+  | Return Position Expr
+  | While Position Expr Stmt
+  | LocalVarDecl Position Type LocalName (Maybe Expr)
+  | If Position Expr Stmt (Maybe Stmt)
+  | StmtOrExprAsStmt Position StmtOrExpr
   deriving (Show, Eq, Ord)
 
 data StmtOrExpr
@@ -49,14 +51,14 @@ data StmtOrExpr
   deriving (Show, Eq, Ord)
 
 data Expr
-  = This
-  | Super
-  | Name LocalOrFieldOrClassName
-  | FieldAccess Expr FieldName
-  | Unary UnOparator Expr
-  | Binary BinOperator Expr Expr
-  | Literal Literal
-  | StmtOrExprAsExpr StmtOrExpr
+  = This Position
+  | Super Position
+  | Name Position LocalOrFieldOrClassName
+  | FieldAccess Position Expr FieldName
+  | Unary Position UnOparator Expr
+  | Binary Position BinOperator Expr Expr
+  | Literal Position Literal
+  | StmtOrExprAsExpr Position StmtOrExpr
   deriving (Show, Eq, Ord)
 data Literal
   = IntLit Integer
@@ -65,4 +67,5 @@ data Literal
   | Null
   deriving (Show, Eq, Ord)
 
-type Program = [Class]
+data Position = Position { line :: Integer }
+  deriving (Show, Eq, Ord)

@@ -1,10 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use mapAndUnzipM" #-}
 module Typecheck(checkProgram) where
 
-import           Control.Monad        (when)
+import           Control.Monad        (forM_, when)
 import           Control.Monad.Except (Except, MonadError (throwError))
 import           Data.List            (find, nub)
 import           Data.List.NonEmpty   (unzip)
@@ -20,9 +19,6 @@ import qualified Types.TAST           as TAST
 hasNoDuplicates :: Eq a => [a] -> Bool
 hasNoDuplicates xs = length xs == length (nub xs)
 
-(.:) :: (b -> c) -> (a1 -> a2 -> b) -> a1 -> a2 -> c
-(.:) = (.) . (.)
-
 infixr 8 -.
 (-.) :: (a -> b) -> (b -> c) -> a -> c
 (-.) = flip (.)
@@ -32,8 +28,6 @@ type Excepting = Except String
 liftBool :: e -> Bool -> Except e ()
 liftBool _   True  = return ()
 liftBool err False = throwError err
-liftBoolM :: e -> Except e Bool -> Except e ()
-liftBoolM e mbool = mbool >>= liftBool e
 liftMaybe :: e -> Maybe a -> Except e a
 liftMaybe _ (Just x)  = return x
 liftMaybe err Nothing = throwError err
@@ -115,41 +109,41 @@ checkConstructor :: [AST.Class] -> AST.Class -> AST.Method -> Excepting ()
 checkConstructor _ _ AST.Method{ AST.mtype, AST.mname, AST.mbody } = do
   liftBool ("Expected constructor of class " ++ mname ++ " to have return type void.") $
     mtype == Void
-  liftBool ("Unexpected return value in constructor of class " ++ mname ++ ".") $
-    hasReturn mbody
-  where hasReturn (AST.Block stmts) = any hasReturn stmts
-        hasReturn (AST.Return _) = True
-        hasReturn (AST.While _ stmt) = hasReturn stmt
-        hasReturn (AST.LocalVarDecl {}) = False
-        hasReturn (AST.If _ stmt1 mstmt2) = hasReturn stmt1 || maybe False hasReturn mstmt2
-        hasReturn (AST.StmtOrExprAsStmt _) = False
+  checkReturn mbody
+  where checkReturn :: AST.Stmt -> Excepting ()
+        checkReturn (AST.Block _ stmts) = forM_ stmts checkReturn
+        checkReturn (AST.Return pos _) = throwError $ "Unexpected return value at " ++ show pos
+        checkReturn (AST.While _ _ stmt) = checkReturn stmt
+        checkReturn (AST.LocalVarDecl {}) = return ()
+        checkReturn (AST.If _ _ stmt1 mstmt2) = checkReturn stmt1 >> forM_ mstmt2 checkReturn
+        checkReturn (AST.StmtOrExprAsStmt _ _) = return ()
 
 
 checkStmt :: ExprCtx -> {-target::-}Type -> AST.Stmt -> Excepting (TAST.Stmt, {-definiteReturn::-}Bool)
-checkStmt _   _      (AST.Block []) =
+checkStmt _   _      (AST.Block _ []) =
   return (TAST.Block [], False)
-checkStmt ctx target (AST.Block (AST.LocalVarDecl tvar name minit:stmts)) = do
+checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ tvar name minit:stmts)) = do
   minit' <- mapM (checkExpr ctx) minit
   liftBool ("Expected initializer " ++ show (fromJust minit) ++ " to have declared type " ++ show tvar) $
     maybe True (typee -. (<: tvar)) minit'
-  (block', defReturns) <- checkStmt (addLocal tvar name ctx) target $ AST.Block stmts
+  (block', defReturns) <- checkStmt (addLocal tvar name ctx) target $ AST.Block blockPos stmts
    -- This is safe, as AST.Block is used as input
   let (TAST.Block stmts') = block'
   return (TAST.Block (TAST.LocalVarDecl tvar name minit':stmts'), defReturns)
-checkStmt ctx target (AST.Block (stmt:stmts)) = do
+checkStmt ctx target (AST.Block blockPos (stmt:stmts)) = do
   (stmt', defReturn) <- checkStmt ctx target stmt
-  (block', defReturns) <- checkStmt ctx target $ AST.Block stmts
+  (block', defReturns) <- checkStmt ctx target $ AST.Block blockPos stmts
    -- This is safe, as AST.Block is used as input
   let (TAST.Block stmts') = block'
   liftBool ("Unreachable code: " ++ show stmts' ++ ".") $
     defReturn && not (Prelude.null stmts)
   return (TAST.Block (stmt':stmts'), defReturn || defReturns)
-checkStmt ctx target (AST.Return expr) = do
+checkStmt ctx target (AST.Return _ expr) = do
   expr' <- checkExpr ctx expr
   liftBool ("Expected " ++ show expr' ++ " to match return type " ++ show target ++ ".") $
     typee expr' <: target
   return (TAST.Return expr', True)
-checkStmt ctx target (AST.While cond body) = do
+checkStmt ctx target (AST.While _ cond body) = do
   cond' <- checkExpr ctx cond
   liftBool ("Expected while condition " ++ show cond' ++ " to have type bool") $
     typee cond' == Bool
@@ -157,39 +151,40 @@ checkStmt ctx target (AST.While cond body) = do
   return (TAST.While cond' body', False)
 checkStmt _   _      decl@(AST.LocalVarDecl {}) =
   throwError $ "Variable declaration " ++ show decl ++ " is not allowed here."
-checkStmt ctx target (AST.If cond ifBranch melseBranch) = do
+checkStmt ctx target (AST.If _ cond ifBranch melseBranch) = do
   cond' <- checkExpr ctx cond
   liftBool ("Expected if condition " ++ show cond' ++ " to have type bool") $
     typee cond' == Bool
   (ifBranch', defReturn1) <- checkStmt ctx target ifBranch
   (melseBranch', mdefReturn2) <- unzip <$> mapM (checkStmt ctx target) melseBranch
   return (TAST.If cond' ifBranch' melseBranch', defReturn1 && fromMaybe False mdefReturn2)
-checkStmt ctx _      (AST.StmtOrExprAsStmt stmtExpr) = do
-  expr' <- checkExpr ctx $ AST.StmtOrExprAsExpr stmtExpr
+checkStmt ctx _      (AST.StmtOrExprAsStmt pos stmtExpr) = do
+  expr' <- checkExpr ctx $ AST.StmtOrExprAsExpr pos stmtExpr
    -- This is safe, as AST.StmtOrExprAsExpr is used as input
   let (TAST.StmtOrExprAsExpr _ stmtExpr') = expr'
   return (TAST.StmtOrExprAsStmt stmtExpr', False)
 
 checkExpr :: ExprCtx -> AST.Expr -> Excepting TAST.Expr
-checkExpr Ctx{static, cIass} AST.This = do
+checkExpr Ctx{static, cIass} (AST.This _) = do
   liftBool "this can only be used in a non-static context." $
     not static
   return $ TAST.This (Instance $ AST.cname cIass)
-checkExpr ctx@Ctx{static, locals, cIass} (AST.Name name) = do
+checkExpr _ (AST.Super _) = throwError "super is currently unsupported."
+checkExpr ctx@Ctx{static, locals, cIass} (AST.Name _ name) = do
   tresult <- case (Data.Map.lookup name locals, resolveField name cIass, resolveClass ctx name) of
     (Just t , _      , _      ) -> return t
     (Nothing, Just f , _      ) -> fcheckStatic static f >> return (AST.ftype f)
     (Nothing, Nothing, Just c ) -> return $ Class (AST.cname c)
     (Nothing, Nothing, Nothing) -> throwError $ "Name " ++ name ++ " not found."
   return $ TAST.Name tresult name
-checkExpr ctx (AST.FieldAccess expr name) = do
+checkExpr ctx (AST.FieldAccess _ expr name) = do
   expr' <- checkExpr ctx expr
   (tstatic, tname) <- unpackClassType expr'
   cIass <- resolveClassM ctx tname
   field <- resolveFieldM name cIass
   fcheckStatic tstatic field
   return $ TAST.FieldAccess (AST.ftype field) expr' name
-checkExpr ctx (AST.Unary op expr) = do
+checkExpr ctx (AST.Unary _ op expr) = do
   expr' <- checkExpr ctx expr
   tresult <- liftMaybe ("Operator " ++ show op ++ " is not defined on type " ++ show (typee expr') ++ ".") $
     fmap snd $ flip find types $ \((op', tin),_) -> op' == op && typee expr' <: tin
@@ -201,7 +196,7 @@ checkExpr ctx (AST.Unary op expr) = do
             , ((PreDecrement, Int ), Int )
             , ((LNot        , Bool), Bool)
             ]
-checkExpr ctx (AST.Binary op expr1 expr2) = do
+checkExpr ctx (AST.Binary _ op expr1 expr2) = do
   expr1' <- checkExpr ctx expr1
   expr2' <- checkExpr ctx expr2
   tresult <- liftMaybe ("Operator " ++ show op ++ " is not defined on type " ++ show (typee expr1') ++ " x " ++ show (typee expr2') ++ ".") $
@@ -228,11 +223,11 @@ checkExpr ctx (AST.Binary op expr1 expr2) = do
             , ((NEQ, Char, Char), Bool)
             , ((NEQ, Instance "Object", Instance "Object"), Bool)
             ]
-checkExpr _ (AST.Literal (AST.IntLit i)) = return $ TAST.Literal Int $ TAST.IntLit i
-checkExpr _ (AST.Literal (AST.CharLit c)) = return $ TAST.Literal Char $ TAST.CharLit c
-checkExpr _ (AST.Literal (AST.BoolLit b)) = return $ TAST.Literal Bool $ TAST.BoolLit b
-checkExpr _ (AST.Literal (AST.Null)) = return $ TAST.Literal NullType TAST.Null
-checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr (AST.Assign mleft name right)) = do
+checkExpr _ (AST.Literal _ (AST.IntLit i)) = return $ TAST.Literal Int $ TAST.IntLit i
+checkExpr _ (AST.Literal _ (AST.CharLit c)) = return $ TAST.Literal Char $ TAST.CharLit c
+checkExpr _ (AST.Literal _ (AST.BoolLit b)) = return $ TAST.Literal Bool $ TAST.BoolLit b
+checkExpr _ (AST.Literal _ AST.Null) = return $ TAST.Literal NullType TAST.Null
+checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr _ (AST.Assign mleft name right)) = do
   mleft' <- mapM (checkExpr ctx) mleft
   right' <- checkExpr ctx right
   tresult <- case (mleft', Data.Map.lookup name locals, resolveField name $ cIass ctx) of
@@ -247,13 +242,13 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr (AST.Assign mleft name right)) =
   liftBool (show right' ++ " is not assignable to type " ++ show tresult ++ ".") $
     typee right' <: tresult
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.Assign mleft' name right'
-checkExpr ctx (AST.StmtOrExprAsExpr (AST.New name args)) = do
+checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.New name args)) = do
   params <- AST.mparams <$> (resolveMethodM name =<< resolveClassM ctx name)
   args' <- mapM (checkExpr ctx) args
   checkArgs args' params
   let tresult = Instance name
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.New name args'
-checkExpr ctx (AST.StmtOrExprAsExpr (AST.MethodCall mexpr name args)) = do
+checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
   mexpr' <- mapM (checkExpr ctx) mexpr
   args' <- mapM (checkExpr ctx) args
   (tstatic, tname) <- case mexpr' of
