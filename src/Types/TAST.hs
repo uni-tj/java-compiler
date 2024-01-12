@@ -9,29 +9,30 @@ type Program = [Class]
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
-  { cvisibility :: Visibility
-  , cname       :: ClassName
+  { caccess  :: AccessModifier
+  , cname    :: ClassName
   -- not required
-  , cextends    :: ClassName
-  , cfields     :: [Field]
-  , cmethods    :: [Method]
+  , cextends :: ClassName
+  , cfields  :: [Field]
+  , cmethods :: [Method]
   }
   deriving (Show, Eq, Ord)
 
 data Field = Field
-  { ftype   :: Type
+  { faccess :: AccessModifier
   , fstatic :: Bool
+  , ftype   :: Type
   , fname   :: FieldName
   , finit   :: Maybe Expr
   }
   deriving (Show, Eq, Ord)
 data Method = Method
-  { mvisibility :: Visibility
-  , mtype       :: Type
-  , mstatic     :: Bool
-  , mname       :: FieldName
-  , mparams     :: [(Type, LocalName)]
-  , mbody       :: Stmt
+  { maccess :: AccessModifier
+  , mtype   :: Type
+  , mstatic :: Bool
+  , mname   :: FieldName
+  , mparams :: [(Type, LocalName)]
+  , mbody   :: Stmt
   }
   deriving (Show, Eq, Ord)
 

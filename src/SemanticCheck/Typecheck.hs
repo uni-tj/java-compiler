@@ -1,18 +1,18 @@
-{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use mapAndUnzipM" #-}
 module Typecheck(checkProgram) where
 
-import           Control.Monad        (forM_, when)
-import           Control.Monad.Except (Except, MonadError (throwError))
+import           Control.Monad.Except (Except, MonadError (throwError),
+                                       runExcept)
+import           Control.Monad.Extra  (forM_, when, whenJust)
 import           Data.List            (find, nub)
 import           Data.List.NonEmpty   (unzip)
 import           Data.Map
 import           Data.Maybe           (fromJust, fromMaybe, isJust)
 import           Prelude              hiding (EQ, GT, LT, unzip)
 import qualified Types.AST            as AST
-import           Types.Core           (BinOperator (..), Identifier, Type (..),
-                                       UnOparator (..), Visibility (..))
+import           Types.Core           (AccessModifier (..), BinOperator (..),
+                                       Identifier, Type (..), UnOparator (..))
 import qualified Types.TAST           as TAST
 
 {- General helper functions -}
@@ -60,9 +60,9 @@ checkProgram classes = do
   mapM (checkClass classes) classes
 
 checkClass :: [AST.Class] -> AST.Class -> Excepting TAST.Class
-checkClass cIasses cIass@AST.Class{AST.cvisibility, AST.cname, AST.cfields, AST.cmethods} = do
-  liftBool "Visibility of top level class must be public or package." $
-    cvisibility == Public || cvisibility == Package
+checkClass cIasses cIass@AST.Class{AST.caccess, AST.cname, AST.cfields, AST.cmethods} = do
+  liftBool ("Accessibility of top level class " ++ cname ++ " must be public or package.") $
+    caccess == Public || caccess == Package
   liftBool ("Fields must have unique names in class " ++ cname) $
     hasNoDuplicates $ AST.fname <$> cfields
   liftBool ("Methods must have unique names in class " ++ cname) $
@@ -70,7 +70,7 @@ checkClass cIasses cIass@AST.Class{AST.cvisibility, AST.cname, AST.cfields, AST.
   tfields <- mapM (checkField cIasses cIass) cfields
   tmethods <- mapM (checkMethod cIasses cIass) cmethods
   return TAST.Class {
-    TAST.cvisibility,
+    TAST.caccess,
     TAST.cname,
     TAST.cextends = [],
     TAST.cfields = tfields,
@@ -78,9 +78,10 @@ checkClass cIasses cIass@AST.Class{AST.cvisibility, AST.cname, AST.cfields, AST.
   }
 
 checkField :: [AST.Class] -> AST.Class -> AST.Field -> Excepting TAST.Field
-checkField cIasses cIass AST.Field { AST.ftype, AST.fstatic, AST.fname, AST.finit } = do
+checkField cIasses cIass AST.Field { AST.faccess, AST.fstatic, AST.ftype, AST.fname, AST.finit } = do
   finit' <- mapM (checkExpr Ctx{locals = empty, cIass, static = fstatic, cIasses}) finit
   return TAST.Field {
+    TAST.faccess,
     TAST.ftype,
     TAST.fstatic,
     TAST.fname,
@@ -88,7 +89,7 @@ checkField cIasses cIass AST.Field { AST.ftype, AST.fstatic, AST.fname, AST.fini
   }
 
 checkMethod :: [AST.Class] -> AST.Class -> AST.Method -> Excepting TAST.Method
-checkMethod cIasses cIass method@AST.Method{ AST.mvisibility, AST.mtype, AST.mstatic, AST.mname, AST.mparams, AST.mbody } = do
+checkMethod cIasses cIass method@AST.Method{ AST.maccess, AST.mstatic, AST.mtype, AST.mname, AST.mparams, AST.mbody } = do
   when (mname == AST.cname cIass) $ checkConstructor cIasses cIass method
   liftBool ("Parameters must have unique names in method " ++ AST.cname cIass ++ "." ++ mname ++ ".") $
     hasNoDuplicates $ snd <$> mparams
@@ -96,9 +97,9 @@ checkMethod cIasses cIass method@AST.Method{ AST.mvisibility, AST.mtype, AST.mst
   liftBool ("Not all paths return a value in method " ++ AST.cname cIass ++ "." ++ mname ++ ".") $
     mtype == Void || defReturn
   return TAST.Method {
-    TAST.mvisibility,
-    TAST.mtype,
+    TAST.maccess,
     TAST.mstatic,
+    TAST.mtype,
     TAST.mname,
     TAST.mparams,
     TAST.mbody = mbody'
@@ -171,18 +172,19 @@ checkExpr Ctx{static, cIass} (AST.This _) = do
     not static
   return $ TAST.This (Instance $ AST.cname cIass)
 checkExpr _ (AST.Super _) = throwError "super is currently unsupported."
-checkExpr ctx@Ctx{static, locals, cIass} (AST.Name _ name) = do
-  tresult <- case (Data.Map.lookup name locals, resolveField name cIass, resolveClass ctx name) of
-    (Just t , _      , _      ) -> return t
-    (Nothing, Just f , _      ) -> fcheckStatic static f >> return (AST.ftype f)
-    (Nothing, Nothing, Just c ) -> return $ Class (AST.cname c)
-    (Nothing, Nothing, Nothing) -> throwError $ "Name " ++ name ++ " not found."
+checkExpr ctx@Ctx{static, locals, cIass} (AST.Name pos name) = do
+  tresult <- case (Data.Map.lookup name locals, runExcept $ lookupField ctx name cIass, lookupClass ctx name) of
+    (Just t , _             , _      ) -> return t
+    (Nothing, Left err      , _      ) -> throwError err
+    (Nothing, Right (Just f), _      ) -> fcheckStatic static f >> return (AST.ftype f)
+    (Nothing, Right Nothing , Just c ) -> return $ Class (AST.cname c)
+    (Nothing, Right Nothing , Nothing) -> throwError $ "Name " ++ name ++ " not found at " ++ show pos
   return $ TAST.Name tresult name
 checkExpr ctx (AST.FieldAccess _ expr name) = do
   expr' <- checkExpr ctx expr
   (tstatic, tname) <- unpackClassType expr'
-  cIass <- resolveClassM ctx tname
-  field <- resolveFieldM name cIass
+  cIass <- resolveClass ctx tname
+  field <- resolveField ctx name cIass
   fcheckStatic tstatic field
   return $ TAST.FieldAccess (AST.ftype field) expr' name
 checkExpr ctx (AST.Unary _ op expr) = do
@@ -231,20 +233,21 @@ checkExpr _ (AST.Literal _ AST.Null) = return $ TAST.Literal NullType TAST.Null
 checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr _ (AST.Assign mleft name right)) = do
   mleft' <- mapM (checkExpr ctx) mleft
   right' <- checkExpr ctx right
-  tresult <- case (mleft', Data.Map.lookup name locals, resolveField name $ cIass ctx) of
-    (Just l', _      , _      ) -> do
-                                    (static, cIassName) <- unpackClassType l'
-                                    f <- resolveFieldM name =<< resolveClassM ctx cIassName
-                                    fcheckStatic static f
-                                    return $ AST.ftype f
-    (Nothing, Just t , _      ) -> return t
-    (Nothing, Nothing, Just f ) -> fcheckStatic (static ctx) f >> return (AST.ftype f)
-    (Nothing, Nothing, Nothing) -> throwError $ "Name " ++ name ++ " not found."
+  tresult <- case (mleft', Data.Map.lookup name locals, runExcept $ lookupField ctx name $ cIass ctx) of
+    (Just l', _      , _             ) -> do
+                                          (static, cIassName) <- unpackClassType l'
+                                          f <- resolveField ctx name =<< resolveClass ctx cIassName
+                                          fcheckStatic static f
+                                          return $ AST.ftype f
+    (Nothing, Just t , _             ) -> return t
+    (Nothing, Nothing, Left err      ) -> throwError err
+    (Nothing, Nothing, Right (Just f)) -> fcheckStatic (static ctx) f >> return (AST.ftype f)
+    (Nothing, Nothing, Right Nothing ) -> throwError $ "Name " ++ name ++ " not found."
   liftBool (show right' ++ " is not assignable to type " ++ show tresult ++ ".") $
     typee right' <: tresult
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.Assign mleft' name right'
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.New name args)) = do
-  params <- AST.mparams <$> (resolveMethodM name =<< resolveClassM ctx name)
+  params <- AST.mparams <$> (resolveMethod ctx name =<< resolveClass ctx name)
   args' <- mapM (checkExpr ctx) args
   checkArgs args' params
   let tresult = Instance name
@@ -255,7 +258,7 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
   (tstatic, tname) <- case mexpr' of
               Just expr' -> unpackClassType expr'
               Nothing    -> return (static ctx, AST.cname $ cIass ctx)
-  method <- resolveMethodM name =<< resolveClassM ctx tname
+  method <- resolveMethod ctx name =<< resolveClass ctx tname
   mcheckStatic tstatic method
   checkArgs args' $ AST.mparams method
   let tresult = AST.mtype method
@@ -263,20 +266,31 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
 
 {- typecheck helper functions
 -}
-resolveClass :: ExprCtx -> Identifier -> Maybe AST.Class
-resolveClass ctx name = find ((name ==) . AST.cname) $ cIasses ctx
-resolveClassM :: ExprCtx -> Identifier -> Excepting AST.Class
-resolveClassM ctx name = liftMaybe ("Class " ++ name ++ " does not exist.") $ resolveClass ctx name
+-- doesn't need monad, because all classes are public/package and therefore accessible
+lookupClass :: ExprCtx -> Identifier -> Maybe AST.Class
+lookupClass ctx name = find ((name ==) . AST.cname) $ cIasses ctx
+resolveClass :: ExprCtx -> Identifier -> Excepting AST.Class
+resolveClass ctx name = liftMaybe ("Class " ++ name ++ " does not exist.") $ lookupClass ctx name
 
-resolveMethod :: Identifier -> AST.Class -> Maybe AST.Method
-resolveMethod name cIass = find ((name ==) . AST.mname) $ AST.cmethods cIass
-resolveMethodM :: Identifier -> AST.Class -> Excepting AST.Method
-resolveMethodM name cIass = liftMaybe ("Method " ++ AST.cname cIass ++ " does in exist on class " ++ name ++ ".") $ resolveMethod name cIass
+lookupMethod :: ExprCtx -> Identifier -> AST.Class -> Excepting (Maybe AST.Method)
+lookupMethod Ctx{cIass=cIassCtx} name cIass = do
+  let mmethod = find ((name ==) . AST.mname) $ AST.cmethods cIass
+  whenJust mmethod $ \method ->
+    liftBool ("Access of method " ++ name ++ " is not permitted from class " ++ AST.cname cIassCtx ++ ".")
+    $ AST.cname cIassCtx == AST.cname cIass || AST.maccess method <= Package
+  return mmethod
+resolveMethod :: ExprCtx -> Identifier -> AST.Class -> Excepting AST.Method
+resolveMethod ctx name cIass = liftMaybe ("Method " ++ AST.cname cIass ++ " does in exist on class " ++ name ++ ".") =<< lookupMethod ctx name cIass
 
-resolveField :: Identifier -> AST.Class -> Maybe AST.Field
-resolveField name cIass = find ((name ==) . AST.fname) $ AST.cfields cIass
-resolveFieldM :: Identifier -> AST.Class -> Excepting AST.Field
-resolveFieldM name cIass = liftMaybe ("Field " ++ AST.cname cIass ++ " does in exist on class " ++ name ++ ".") $ resolveField name cIass
+lookupField :: ExprCtx -> Identifier -> AST.Class -> Excepting (Maybe AST.Field)
+lookupField Ctx{cIass=cIassCtx} name cIass = do
+  let mfield = find ((name ==) . AST.fname) $ AST.cfields cIass
+  whenJust mfield $ \field ->
+    liftBool ("Access of field " ++ name ++ " is not permitted from class " ++ AST.cname cIassCtx ++ ".")
+    $ AST.cname cIassCtx == AST.cname cIass || AST.faccess field <= Package
+  return mfield
+resolveField :: ExprCtx -> Identifier -> AST.Class -> Excepting AST.Field
+resolveField ctx name cIass = liftMaybe ("Field " ++ AST.cname cIass ++ " does in exist on class " ++ name ++ ".") =<< lookupField ctx name cIass
 
 mcheckStatic :: Bool -> AST.Method -> Excepting ()
 mcheckStatic static AST.Method{AST.mstatic, AST.mname}
