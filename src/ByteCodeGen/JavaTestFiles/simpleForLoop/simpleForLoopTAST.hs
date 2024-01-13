@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module ByteCodeGen where
 
 import Types.TAST
@@ -18,26 +17,28 @@ test = Types.TAST.Class
       , mname = "simpleForLoop"
       , mparams = []
       , mbody = 
-        Block Void 
+        Block
           [ 
-            LocalVarDecl Types.Core.Int Types.Core.Int "i" (Just (Literal Types.Core.Int (IntLit Types.Core.Int 0))), -- i = 0
-            While Types.Core.Bool 
+            LocalVarDecl Types.Core.Int "i" (Just (Literal Types.Core.Int (IntLit 0))), -- i = 0
+            While -- Expr(Binary) Stmt(Block)
               -- Binary Type BinOperator Expr Expr
               (Binary Types.Core.Bool
                 Types.Core.LT -- lower than -> i < 5
                   (Name Types.Core.Int "i") -- i
-                  (Literal Types.Core.Int (IntLit Types.Core.Int 5))) -- 5
-              (Block Void 
-              [ StmtOrExprAsStmt Void 
-                -- Assign Type Expr Expr
-                (Assign Void 
-                  (Name Types.Core.Int "i") 
-                  -- Binary Type BinOperator Expr Expr
-                  (Binary Types.Core.Int 
-                    Add 
-                      (Name Types.Core.Int "i") 
-                      (Literal Types.Core.Int (IntLit Types.Core.Int 1))))
-              ]
+                  (Literal Types.Core.Int (IntLit 5))
+              ) -- 5
+              (Block 
+                [ StmtOrExprAsStmt
+                  -- Assign (Maybe Expr) LocalOrFieldName Expr
+                  (Assign
+                      Nothing -- No target object, assuming "i" is a local variable
+                      "i" -- Local variable or field to be assigned
+                      -- Binary Type BinOperator Expr Expr
+                      (Binary Types.Core.Int
+                          Add 
+                          (Name Types.Core.Int "i")
+                          (Literal Types.Core.Int (IntLit 1))))
+                ]
               )
           ]
       }

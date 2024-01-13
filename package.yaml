@@ -29,7 +29,6 @@ ghc-options:
 
 library:
   source-dirs: src
-  exposed-modules: Jvm
 
 # executables:
 #   JavaCompiler-exe:
