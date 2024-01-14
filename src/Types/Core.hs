@@ -19,7 +19,7 @@ data Type
   | StringArr -- to support main method
   deriving (Show, Eq, Ord)
 
-data Visibility = Public | Package | Protected | Private
+data AccessModifier = Public | Package | Protected | Private
   deriving (Show, Eq, Ord)
 
 {- Seperate enums for operators for better type safety
