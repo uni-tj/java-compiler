@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use mapAndUnzipM" #-}
-module Typecheck(checkProgram) where
+module SemanticCheck.Typecheck(checkProgram) where
 
 import           Control.Monad.Except (Except, MonadError (throwError),
                                        runExcept)

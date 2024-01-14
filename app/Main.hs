@@ -1,6 +1,5 @@
 module Main (main) where
-
-import Lib
+import ByteCodeGen.ByteCodeGen
 
 main :: IO ()
-main = someFunc
+main = print codeGen

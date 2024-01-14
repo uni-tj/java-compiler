@@ -6,13 +6,13 @@ import Types.Core
 
 testAst :: Class
 testAst = Types.TAST.Class 
-  { cvisibility = Public
+  { caccess = Public
   , cname = "simpleforLoopClass"
   , cextends = ""
   , cfields = []
   , cmethods = 
     [ Method 
-      { mvisibility = Public
+      { maccess = Public
       , mtype = Void
       , mstatic = True
       , mname = "simpleForLoop"
