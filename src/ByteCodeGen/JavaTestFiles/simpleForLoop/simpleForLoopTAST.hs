@@ -29,7 +29,8 @@ testAst = Types.TAST.Class
                   (Literal Types.Core.Int (IntLit 5))
               ) -- 5
               (Block 
-                [ StmtOrExprAsStmt
+                [ 
+                  StmtOrExprAsStmt
                   -- Assign (Maybe Expr) LocalOrFieldName Expr
                   (Assign
                       Nothing -- No target object, assuming "i" is a local variable
@@ -38,7 +39,15 @@ testAst = Types.TAST.Class
                       (Binary Types.Core.Int
                           Add 
                           (Name Types.Core.Int "i")
-                          (Literal Types.Core.Int (IntLit 1))))
+                          (Literal Types.Core.Int (IntLit 1)))),
+                  -- New for tests
+                  Types.TAST.If 
+                    (Literal Types.Core.Bool (BoolLit True)) -- Expr
+                      (LocalVarDecl Types.Core.Int "j" (Just (Literal Types.Core.Int (IntLit 0)))) -- Stmt
+                      (Just 
+                        (LocalVarDecl Types.Core.Int "q" (Just (Literal Types.Core.Int (IntLit 0))))
+                    ) -- Maybe Stmt
+                  -- End new for tests
                 ]
               )
           ]

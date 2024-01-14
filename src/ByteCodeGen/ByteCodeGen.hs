@@ -4,9 +4,12 @@ import Types.TAST
 import Types.Core
 import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
 
-codeGen :: Class
-codeGen = testAst
-
+codeGen :: [[(String, Types.Core.Type)]]
+codeGen = do
+  let methods = getMethodsFromClass testAst
+  let mbodys = map getMbodyFromMethod methods
+  return (concatMap localVarGen mbodys)
+   
   -- let classFileNew = ClassFile {
   --   magic = Magic,
   --   minver = MinorVersion {numMinVer = 0},
@@ -67,20 +70,43 @@ codeGen = testAst
 
   -- print "End"
 
+-- Function to get all local variable and store the number (index in array) of the local variable
+-- -> in order to find them later
+localVarGen :: Stmt -> [(String, Types.Core.Type)]
+localVarGen (Block blocks) = concatMap localVarGen blocks
+localVarGen (Return _) = []
+localVarGen (While _ stmt) = localVarGen stmt
+localVarGen (LocalVarDecl localType localName _) = [(localName, localType)]
+localVarGen (If _ stmt mStmt) = localVarGen stmt ++ maybe [] localVarGen mStmt
+localVarGen (StmtOrExprAsStmt _) = []
+
+
+
 codeGenStmt :: Stmt -> [Int]
 codeGenStmt (Block blocks) = concatMap codeGenStmt blocks
-codeGenStmt (Return expr)    = [0]
+
+codeGenStmt (Return expr) = [0]
+
 codeGenStmt (While expr stmt) = codeGenExpr expr ++ codeGenStmt stmt
+
 codeGenStmt (LocalVarDecl varType localName mexpr) = [0]
+
 codeGenStmt (If expr stmt mStmt) = [0]
+
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr) = [0]
+
 
 codeGenExpr :: Expr -> [Int]
 codeGenExpr (This thisName) = [0]
+
 codeGenExpr (Super superName) = [0]
+
 codeGenExpr (Name localOrFieldOrClassType localOrFieldOrClassName) = [0]
+
 codeGenExpr (FieldAccess fieldTyp expr fieldName) = [0] -- expr for this or class or what ever "class a a.j"
+
 codeGenExpr (Unary unaryType unOparator expr) = [0] -- for actions with only one input var like not or ++
+
 -- wrong - have to check for jumpe length after code block of if or while
 codeGenExpr (Binary typeBinary binOperator expr0 expr1) =
     let expr0Res = codeGenExpr expr0 in
@@ -88,7 +114,9 @@ codeGenExpr (Binary typeBinary binOperator expr0 expr1) =
     let len = length expr0Res + length expr1Res in
     expr0Res ++ expr1Res ++ codeGenBinOperator binOperator len
 -- xxx
+
 codeGenExpr (Literal literalType literal) = [0] -- literal is IntLit or BoolLit
+
 codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr) = [0] -- StmtOrExpr is assign, new
 
 codeGenBinOperator :: BinOperator -> Int -> [Int]
@@ -102,11 +130,17 @@ splitLenInTwoBytes len = [highByte, lowByte]
     highByte = len `div` 256
     lowByte = len `mod` 256
 
+getMethodsFromClass :: Types.TAST.Class -> [Method]
+getMethodsFromClass = cmethods
+
+getMbodyFromMethod :: Types.TAST.Method -> Stmt
+getMbodyFromMethod = mbody
+
 getAccessFlags :: Types.TAST.Class -> AccessFlags
 getAccessFlags classInstance = AccessFlags (getAccessFlagsFromVisibility (caccess classInstance))
 
 getAccessFlagsFromVisibility :: Types.Core.AccessModifier -> [Int]
-getAccessFlagsFromVisibility visibility = 
+getAccessFlagsFromVisibility visibility =
   case visibility of
     Types.Core.Public -> [1,32]
     Types.Core.Package -> [1,32]
