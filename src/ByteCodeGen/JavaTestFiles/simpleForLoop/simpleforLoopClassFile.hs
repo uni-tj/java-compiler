@@ -1,5 +1,3 @@
-module ByteCodeGen where
-
 import Jvm.BinaryClass
 import Jvm.Data.ClassFormat
 

@@ -1,9 +1,14 @@
-import Jvm.Data.ClassFormat
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+module ByteCodeGen.ByteCodeGen where
+import ByteCodeGen.Jvm.Data.ClassFormat
 import Types.TAST
 import Types.Core
+import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
 
 main :: IO ()
 main = do
+  print testAst
+
   let classFileNew = ClassFile {
     magic = Magic,
     minver = MinorVersion {numMinVer = 0},
@@ -62,7 +67,7 @@ main = do
     array_attributes = []
   }
 
-  print classFileNew
+  print "End"
 
 codeGenStmt :: Stmt -> [Int]
 codeGenStmt (Block blocks) = concatMap codeGenStmt blocks

@@ -1,10 +1,11 @@
-module ByteCodeGen where
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+module ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST where
 
 import Types.TAST
 import Types.Core
 
-test :: Class
-test = Types.TAST.Class 
+testAst :: Class
+testAst = Types.TAST.Class 
   { cvisibility = Public
   , cname = "simpleforLoopClass"
   , cextends = ""

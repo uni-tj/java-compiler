@@ -1,5 +1,5 @@
-module Jvm.BinaryClass where
-import Jvm.Data.ClassFormat
+module ByteCodeGen.Jvm.BinaryClass where
+import ByteCodeGen.Jvm.Data.ClassFormat
 
 import Data.Binary
 import Data.Binary.Get

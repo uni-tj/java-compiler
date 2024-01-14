@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
-module Jvm.Data.ClassFormat where
+module ByteCodeGen.Jvm.Data.ClassFormat where
 import qualified Data.ByteString.Lazy as BS
 
 -- class file format

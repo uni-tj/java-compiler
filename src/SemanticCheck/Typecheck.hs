@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-module Typecheck(checkProgram) where
+module SemanticCheck.Typecheck(checkProgram) where
 
 import           Control.Monad.Except (Except, MonadError (throwError))
 import           Data.List            (find, nub)
