@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use null" #-}
 
 module ByteCodeGen.ByteCodeGen where
 import ByteCodeGen.Jvm.Data.ClassFormat
@@ -78,7 +80,6 @@ codeGen = do
 -- Function to get all local variable and store the number (index in array) of the local variable
 -- -> in order to find them later
 type LocalVarArrType = [(String, Types.Core.Type)]
-
 localVarGen :: Stmt -> LocalVarArrType
 localVarGen (Block blocks) = concatMap localVarGen blocks
 localVarGen (Return _) = []
@@ -91,12 +92,11 @@ codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
 codeGenStmt (Return expr, localVarArr) = [0]
 
-
 codeGenStmt (While expr stmt, localVarArr) = do
   -- expr(ending up true/false -> 1 or 0 on stack) --- 153, 0, len(stmt) --- stmt
   let codeExpr = codeGenExpr (expr, localVarArr)
   let codeStmt = codeGenStmt (stmt, localVarArr)
-  let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 2) -- 153 -> if value is 0, branch -- 2 Byte offset for branch bytes
+  let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 3) -- 153 -> if value is 0, branch -- 3 for offset
   codeExpr ++ codeWhile ++ codeStmt
 
 codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
@@ -107,15 +107,40 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
         Just index ->
           case varType of
             -- 54 -> istore + numer of local var
-            Types.Core.Int -> codeGenExpr (expr, localVarArr) ++ [54, index]
-            Types.Core.Bool -> codeGenExpr (expr, localVarArr) ++ [54, index]
-            Types.Core.Char -> codeGenExpr (expr, localVarArr) ++ [54, index]
+            Types.Core.Int -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
+            Types.Core.Bool -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
+            Types.Core.Char -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
             _ -> []
         Nothing -> []
     Nothing -> []
 
-codeGenStmt (If expr stmt mStmt, localVarArr) = [0]
-codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = [0]
+codeGenStmt (If expr stmt mStmt, localVarArr) =
+  let codeExpr = codeGenExpr (expr, localVarArr)
+      codeStmt = codeGenStmt (stmt, localVarArr)
+      codeElseStmt = case mStmt of
+        Just elseStmt -> codeGenStmt (elseStmt, localVarArr)
+        Nothing -> []
+  in if length codeElseStmt > 0 then
+    -- +3 because of added goto --- [167] ++ splitLenInTwoBytes (length codeElseStmt) -> goto to overjump else when if is taken
+    codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3 + 3) ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt + 3) ++ codeElseStmt
+  else
+    codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3) ++ codeStmt
+
+
+  -- let codeExpr = codeGenExpr (expr, localVarArr)
+  -- let codeStmt = codeGenStmt (stmt, localVarArr)
+
+  -- let codeElseStmt = case mStmt of
+  --     Just elseStmt -> codeGenStmt (stmt, localVarArr)
+  --   Nothing -> []
+
+
+  -- let codeIf = 153 : splitLenInTwoBytes (length codeStmt + 2 + 3) -- +3 because of goto
+
+  -- 
+  -- codeExpr ++ codeIf ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt) ++ codeElseStmt
+
+codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
 
 codeGenExpr :: (Expr, LocalVarArrType) -> [Int]
@@ -144,7 +169,7 @@ codeGenExpr (Binary typeBinary binOperator expr0 expr1, localVarArr) = do
   let codeBinOperator = codeGenBinOperator binOperator
   codeExpr0 ++ codeExpr1 ++ codeBinOperator
 
--- Todo - only load const from pool and dont push numbers
+-- Todo - only load const from pool and dont push numbers ?
 codeGenExpr (Literal literalType literal, localVarArr) = do
   case literalType of
     -- 54 -> istore + numer of local var
@@ -154,6 +179,28 @@ codeGenExpr (Literal literalType literal, localVarArr) = do
     _ -> []
 
 codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = [0] -- StmtOrExpr is assign, new
+
+codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
+codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
+  -- Todo: How to get parameters? Like class a -> a.i
+  let mExprCode =
+        case mExpr of
+          Just justExpr ->
+            codeGenExpr (justExpr, localVarArr)
+          Nothing -> []
+
+  let exprCode = codeGenExpr (expr, localVarArr)
+
+  let i = findIndex ((== localOrFieldName) . fst) localVarArr
+  case i of
+    Just index ->
+      exprCode ++ [196, 54] ++ splitLenInTwoBytes index
+    Nothing -> []
+
+codeGenStmtOrExpr (New className exprs, localVarArr) = [] -- Todo: Need const pool
+
+codeGenStmtOrExpr (MethodCall mExpr methodName exprs, localVarArr) = [] -- Todo: Need const pool
+
 
 codeGenBinOperator:: BinOperator -> [Int]
 codeGenBinOperator Add = [96]
@@ -180,7 +227,7 @@ codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 
 codeGenLiteral :: Literal -> [Int]
 codeGenLiteral (IntLit integer) = splitLenInTwoBytes (fromIntegral integer)
 codeGenLiteral (CharLit char) = [] -- Todo: What to do with char?
-codeGenLiteral (BoolLit bool) = if bool then [3] else [4] -- Push directly 0 (3) or 1 (4)
+codeGenLiteral (BoolLit bool) = if bool then [4] else [3] -- Push directly 1 (4) or 0 (3) 
 
 splitLenInTwoBytes :: Int -> [Int]
 splitLenInTwoBytes len = [highByte, lowByte]
