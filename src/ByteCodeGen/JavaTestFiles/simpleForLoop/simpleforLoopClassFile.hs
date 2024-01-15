@@ -60,7 +60,16 @@ ClassFile {
                     len_stack_attr = 2, 
                     len_local_attr = 1, 
                     tam_code_attr = 14, 
-                    array_code_attr = [3,59,26,8,162,0,9,132,0,1,167,255,248,177], 
+                    array_code_attr = [
+                        3, -- iconst_0 -> 0 auf stacke
+                        59, -- istore_0
+                        26, -- iload_0
+                        8, -- iconst_5
+                        162,0,9, -- if_icmpge
+                        132,0,1, -- iinc index (localVar), const(how much)
+                        167,255,248, -- goto
+                        177 -- return
+                    ], 
                     tam_ex_attr = 0, 
                     array_ex_attr = [], 
                     tam_atrr_attr = 1, 

@@ -1,15 +1,19 @@
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module ByteCodeGen.ByteCodeGen where
 import ByteCodeGen.Jvm.Data.ClassFormat
 import Types.TAST
 import Types.Core
 import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
 
-codeGen :: [[(String, Types.Core.Type)]]
+import Data.List (findIndex)
+
+codeGen :: [[Int]]
 codeGen = do
   let methods = getMethodsFromClass testAst
   let mbodys = map getMbodyFromMethod methods
-  return (concatMap localVarGen mbodys)
-   
+  let localVarArr = concatMap localVarGen mbodys
+  return (concatMap (\block -> codeGenStmt (block, localVarArr)) mbodys)
+
   -- let classFileNew = ClassFile {
   --   magic = Magic,
   --   minver = MinorVersion {numMinVer = 0},
@@ -72,7 +76,9 @@ codeGen = do
 
 -- Function to get all local variable and store the number (index in array) of the local variable
 -- -> in order to find them later
-localVarGen :: Stmt -> [(String, Types.Core.Type)]
+type LocalVarArrType = [(String, Types.Core.Type)]
+
+localVarGen :: Stmt -> LocalVarArrType
 localVarGen (Block blocks) = concatMap localVarGen blocks
 localVarGen (Return _) = []
 localVarGen (While _ stmt) = localVarGen stmt
@@ -80,20 +86,27 @@ localVarGen (LocalVarDecl localType localName _) = [(localName, localType)]
 localVarGen (If _ stmt mStmt) = localVarGen stmt ++ maybe [] localVarGen mStmt
 localVarGen (StmtOrExprAsStmt _) = []
 
+codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
+codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
+codeGenStmt (Return expr, localVarArr) = [0]
+codeGenStmt (While expr stmt, localVarArr) = codeGenExpr expr ++ codeGenStmt (stmt, localVarArr)
+codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
+  let i = findIndex ((== localName) . fst) localVarArr
+  case mexpr of
+    Just expr ->
+      case i of
+        Just index ->
+          case varType of
+            -- 54 -> istore + numer of local var
+            Types.Core.Int -> codeGenExpr expr ++ [54, index]
+            Types.Core.Bool -> codeGenExpr expr ++ [54, index]
+            Types.Core.Char -> codeGenExpr expr ++ [54, index]
+            _ -> []
+        Nothing -> []
+    Nothing -> []
 
-
-codeGenStmt :: Stmt -> [Int]
-codeGenStmt (Block blocks) = concatMap codeGenStmt blocks
-
-codeGenStmt (Return expr) = [0]
-
-codeGenStmt (While expr stmt) = codeGenExpr expr ++ codeGenStmt stmt
-
-codeGenStmt (LocalVarDecl varType localName mexpr) = [0]
-
-codeGenStmt (If expr stmt mStmt) = [0]
-
-codeGenStmt (StmtOrExprAsStmt stmtOrExpr) = [0]
+codeGenStmt (If expr stmt mStmt, localVarArr) = [0]
+codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = [0]
 
 
 codeGenExpr :: Expr -> [Int]
@@ -115,9 +128,21 @@ codeGenExpr (Binary typeBinary binOperator expr0 expr1) =
     expr0Res ++ expr1Res ++ codeGenBinOperator binOperator len
 -- xxx
 
-codeGenExpr (Literal literalType literal) = [0] -- literal is IntLit or BoolLit
+-- Todo - only load const from pool and dont push numbers
+codeGenExpr (Literal literalType literal) = do
+  case literalType of
+    -- 54 -> istore + numer of local var
+    Types.Core.Int -> 17 : codeGenLiteral literal -- 17 sipush -> 2 Byte
+    Types.Core.Bool -> codeGenLiteral literal
+    Types.Core.Char -> codeGenLiteral literal
+    _ -> []
 
 codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr) = [0] -- StmtOrExpr is assign, new
+
+codeGenLiteral :: Literal -> [Int]
+codeGenLiteral (IntLit integer) = splitLenInTwoBytes (fromIntegral integer)
+codeGenLiteral (CharLit char) = [] -- Todo: What to do with char?
+codeGenLiteral (BoolLit bool) = if bool then [3] else [4] -- Push directly 0 (3) or 1 (4)
 
 codeGenBinOperator :: BinOperator -> Int -> [Int]
 codeGenBinOperator Types.Core.LT byteLen = [161] ++ (splitLenInTwoBytes byteLen)

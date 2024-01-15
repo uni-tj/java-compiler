@@ -21,6 +21,7 @@ testAst = Types.TAST.Class
         Block
           [ 
             LocalVarDecl Types.Core.Int "i" (Just (Literal Types.Core.Int (IntLit 0))), -- i = 0
+            LocalVarDecl Types.Core.Int "j" (Just (Literal Types.Core.Bool (BoolLit True))), -- i = 0
             While -- Expr(Binary) Stmt(Block)
               -- Binary Type BinOperator Expr Expr
               (Binary Types.Core.Bool
