@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+
 module ByteCodeGen.ByteCodeGen where
 import ByteCodeGen.Jvm.Data.ClassFormat
 import Types.TAST
@@ -89,7 +90,15 @@ localVarGen (StmtOrExprAsStmt _) = []
 codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
 codeGenStmt (Return expr, localVarArr) = [0]
-codeGenStmt (While expr stmt, localVarArr) = codeGenExpr expr ++ codeGenStmt (stmt, localVarArr)
+
+
+codeGenStmt (While expr stmt, localVarArr) = do
+  -- expr(ending up true/false -> 1 or 0 on stack) --- 153, 0, len(stmt) --- stmt
+  let codeExpr = codeGenExpr (expr, localVarArr)
+  let codeStmt = codeGenStmt (stmt, localVarArr)
+  let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 2) -- 153 -> if value is 0, branch -- 2 Byte offset for branch bytes
+  codeExpr ++ codeWhile ++ codeStmt
+
 codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
   let i = findIndex ((== localName) . fst) localVarArr
   case mexpr of
@@ -98,9 +107,9 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
         Just index ->
           case varType of
             -- 54 -> istore + numer of local var
-            Types.Core.Int -> codeGenExpr expr ++ [54, index]
-            Types.Core.Bool -> codeGenExpr expr ++ [54, index]
-            Types.Core.Char -> codeGenExpr expr ++ [54, index]
+            Types.Core.Int -> codeGenExpr (expr, localVarArr) ++ [54, index]
+            Types.Core.Bool -> codeGenExpr (expr, localVarArr) ++ [54, index]
+            Types.Core.Char -> codeGenExpr (expr, localVarArr) ++ [54, index]
             _ -> []
         Nothing -> []
     Nothing -> []
@@ -109,27 +118,34 @@ codeGenStmt (If expr stmt mStmt, localVarArr) = [0]
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = [0]
 
 
-codeGenExpr :: Expr -> [Int]
-codeGenExpr (This thisName) = [0]
+codeGenExpr :: (Expr, LocalVarArrType) -> [Int]
+codeGenExpr (This thisName, localVarArr) = [0]
 
-codeGenExpr (Super superName) = [0]
+codeGenExpr (Super superName, localVarArr) = [0]
 
-codeGenExpr (Name localOrFieldOrClassType localOrFieldOrClassName) = [0]
+codeGenExpr (Name localOrFieldOrClassType localOrFieldOrClassName, localVarArr) = do
+  let i = findIndex ((== localOrFieldOrClassName) . fst) localVarArr
+  case i of
+    Just index ->
+      case localOrFieldOrClassType of
+        Types.Core.Int -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
+        Types.Core.Bool -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
+        Types.Core.Char -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
+    Nothing -> []
 
-codeGenExpr (FieldAccess fieldTyp expr fieldName) = [0] -- expr for this or class or what ever "class a a.j"
+codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = [0] -- expr for this or class or what ever "class a a.j"
 
-codeGenExpr (Unary unaryType unOparator expr) = [0] -- for actions with only one input var like not or ++
+codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do -- for actions with only one input var like not or ++
+  codeGenExpr (expr, localVarArr) ++ codeGenUnOparator unOparator
 
--- wrong - have to check for jumpe length after code block of if or while
-codeGenExpr (Binary typeBinary binOperator expr0 expr1) =
-    let expr0Res = codeGenExpr expr0 in
-    let expr1Res = codeGenExpr expr1 in
-    let len = length expr0Res + length expr1Res in
-    expr0Res ++ expr1Res ++ codeGenBinOperator binOperator len
--- xxx
+codeGenExpr (Binary typeBinary binOperator expr0 expr1, localVarArr) = do
+  let codeExpr0 = codeGenExpr (expr0, localVarArr)
+  let codeExpr1 = codeGenExpr (expr1, localVarArr)
+  let codeBinOperator = codeGenBinOperator binOperator
+  codeExpr0 ++ codeExpr1 ++ codeBinOperator
 
 -- Todo - only load const from pool and dont push numbers
-codeGenExpr (Literal literalType literal) = do
+codeGenExpr (Literal literalType literal, localVarArr) = do
   case literalType of
     -- 54 -> istore + numer of local var
     Types.Core.Int -> 17 : codeGenLiteral literal -- 17 sipush -> 2 Byte
@@ -137,17 +153,34 @@ codeGenExpr (Literal literalType literal) = do
     Types.Core.Char -> codeGenLiteral literal
     _ -> []
 
-codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr) = [0] -- StmtOrExpr is assign, new
+codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = [0] -- StmtOrExpr is assign, new
+
+codeGenBinOperator:: BinOperator -> [Int]
+codeGenBinOperator Add = [96]
+codeGenBinOperator Sub = [100]
+codeGenBinOperator Mul = [104]
+codeGenBinOperator Div = [108]
+codeGenBinOperator Mod = [112] -- logical int remainder
+codeGenBinOperator LAnd = [126]
+codeGenBinOperator LOr = [128]
+codeGenBinOperator Types.Core.LT = [161, 0, 7, 3, 167, 0, 4, 4] -- IF_ICMPLT label, ICONST_0, GOTO end, label:, ICONST_1
+codeGenBinOperator LTE = [163, 0, 7, 4, 167, 0, 4, 3] -- IF_ICMPGT label, ICONST_1, GOTO end, label:, ICONST_0
+codeGenBinOperator Types.Core.GT = [163, 0, 7, 3, 167, 0, 4, 4] -- IF_ICMPGT label, ICONST_0, GOTO end, label:, ICONST_1
+codeGenBinOperator GTE = [161, 0, 7, 4, 167, 0, 4, 3] -- IF_ICMPLT label, ICONST_1, GOTO end, label:, ICONST_0
+codeGenBinOperator Types.Core.EQ = [100, 153, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifeq label, ICONST_0, GOTO end, label:, ICONST_1
+codeGenBinOperator NEQ = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, ICONST_0, GOTO end, label:, ICONST_1
+
+codeGenUnOparator:: UnOparator -> [Int]
+codeGenUnOparator Plus = [] -- Todo: +i? -> Do nothing?
+codeGenUnOparator Minus = [116] -- Todo: -i? -> Use INEG
+codeGenUnOparator PreIncrement = [4, 96] -- Todo: What to do in this case? Is it i++?
+codeGenUnOparator PreDecrement = [4, 100] -- Todo: What to do in this case? Is it i--?
+codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
 
 codeGenLiteral :: Literal -> [Int]
 codeGenLiteral (IntLit integer) = splitLenInTwoBytes (fromIntegral integer)
 codeGenLiteral (CharLit char) = [] -- Todo: What to do with char?
 codeGenLiteral (BoolLit bool) = if bool then [3] else [4] -- Push directly 0 (3) or 1 (4)
-
-codeGenBinOperator :: BinOperator -> Int -> [Int]
-codeGenBinOperator Types.Core.LT byteLen = [161] ++ (splitLenInTwoBytes byteLen)
-codeGenBinOperator Types.Core.GT byteLen = [161] ++ (splitLenInTwoBytes byteLen)
--- Pattern match for rest
 
 splitLenInTwoBytes :: Int -> [Int]
 splitLenInTwoBytes len = [highByte, lowByte]
