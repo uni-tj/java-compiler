@@ -49,7 +49,7 @@ data Stmt
 data StmtOrExpr
   = Assign (Maybe Expr) LocalOrFieldName Expr
   | New ClassName [Expr]
-  | MethodCall (Maybe Expr) MethodName [Expr]
+  | MethodCall (Maybe Expr) MethodName [(Type, Expr)]
   deriving (Show, Eq, Ord)
 
 data Expr

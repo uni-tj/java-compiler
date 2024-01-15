@@ -267,7 +267,8 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
   mcheckStatic tstatic method
   checkArgs args' $ AST.mparams method
   let tresult = AST.mtype method
-  return $ TAST.StmtOrExprAsExpr tresult $ TAST.MethodCall mexpr' name args'
+  let tparams = fst <$> AST.mparams method
+  return $ TAST.StmtOrExprAsExpr tresult $ TAST.MethodCall mexpr' name (zip tparams args')
 
 {- typecheck helper functions
 -}
