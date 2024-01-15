@@ -9,8 +9,9 @@ import           Data.Foldable        (foldlM)
 import           Data.List            (find, intersperse, nub, tails, uncons)
 import           Data.List.NonEmpty   (unzip)
 import           Data.Map             (Map)
-import qualified Data.Map             as Map (empty, insert, lookup)
+import qualified Data.Map             as Map
 import           Data.Maybe           (fromJust, fromMaybe, isJust, mapMaybe)
+import           Data.Tuple.Extra     (swap)
 import           Prelude              hiding (EQ, GT, LT, unzip)
 import qualified Types.AST            as AST
 import           Types.Core           (AccessModifier (..), BinOperator (..),
@@ -98,7 +99,7 @@ checkMethod cIasses cIass method@AST.Method{ AST.maccess, AST.mstatic, AST.mtype
   when (mname == AST.cname cIass) $ checkConstructor cIasses cIass method
   liftBool ("Parameters must have unique names in method " ++ AST.cname cIass ++ "." ++ mname ++ ".") $
     hasNoDuplicates $ snd <$> mparams
-  (mbody', defReturn) <- checkStmt Ctx{locals=Map.empty,cIass,static=mstatic,cIasses} mtype mbody
+  (mbody', defReturn) <- checkStmt Ctx{locals,cIass,static=mstatic,cIasses} mtype mbody
   liftBool ("Not all paths return a value in method " ++ AST.cname cIass ++ "." ++ mname ++ ".") $
     mtype == Void || defReturn
   return TAST.Method {
@@ -109,6 +110,7 @@ checkMethod cIasses cIass method@AST.Method{ AST.maccess, AST.mstatic, AST.mtype
     TAST.mparams,
     TAST.mbody = mbody'
   }
+  where locals = Map.fromList $ swap <$> mparams
 
 
 checkConstructor :: [AST.Class] -> AST.Class -> AST.Method -> Excepting ()
