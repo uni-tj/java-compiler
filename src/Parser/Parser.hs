@@ -9,7 +9,7 @@ import Data.Maybe
 
 --temporary placeholder for positions in AST
 dummyPos :: Position 
-dummyPos = Position {line = 0}
+dummyPos = Position {start = (0,0), end = (0,0)}
 
 {-----------------------------------------------------------------------------}
 {- # "Meta" functions -}
@@ -40,12 +40,12 @@ parseProgram = many parseClass
 parseClass :: Parser Token Types.AST.Class
 parseClass =    ((parseVisibility +.+ (lexem CLASS) +.+ parseClassName +.+ (lexem EXTENDS) +.+ parseClassName +.+ (lexem LBRACKET) +.+ parseClassBody +.+ (lexem RBRACKET))
                 <<< (\(vis, (_, (name, (_ , (supName, (_, (cblock,_)))))))
-                    -> Types.AST.Class { cvisibility = vis, cname = name, cextends = supName,
+                    -> Types.AST.Class { caccess = vis, cname = name, cextends = supName,
                                cfields = getFields cblock, cmethods = getMethods cblock}))
 
             ||| ((parseVisibility +.+ (lexem CLASS) +.+ parseClassName +.+ (lexem LBRACKET) +.+ parseClassBody +.+ (lexem RBRACKET) ) 
                 <<< (\(vis, (_, (name, (_, (cblock,_)))))
-                    -> Types.AST.Class { cvisibility = vis, cname = name, cextends = "Object", 
+                    -> Types.AST.Class { caccess = vis, cname = name, cextends = "Object", 
                                cfields = getFields cblock, cmethods = getMethods cblock}))
             
 
@@ -82,13 +82,13 @@ parseMethodDecl :: Parser Token Method
 parseMethodDecl =     ((parseVisibility +.+ staticParser +.+ parseType +.+ parseMethodName +.+ (lexem LBRACE) 
                         +.+ parseMethodParams +.+ (lexem RBRACE) +.+ parseBlock) 
                             <<< (\(vis,(stc, (retType,( name, (_, (params, (_, block))))))) 
-                                -> Method {mvisibility = vis, mtype = retType, mstatic = stc, mname = name,
+                                -> Method {maccess = vis, mtype = retType, mstatic = stc, mname = name,
                                     mparams = params, mbody = block}))
 
                   ||| ((parseVisibility +.+ parseMethodName +.+ (lexem LBRACE) +.+ parseMethodParams 
                         +.+ (lexem RBRACE) +.+ parseBlock)
                             <<< (\(vis,(name, (_, (params, (_, block))))) 
-                                -> Method {mvisibility = vis, mtype = Void, mstatic = False, mname = name, 
+                                -> Method {maccess = vis, mtype = Void, mstatic = False, mname = name, 
                                     mparams = params, mbody = block}))
 
 
@@ -108,10 +108,10 @@ parseMethodParams =     (succeed [])
 {-----------------------------------------------------------------------------}
 
 parseFieldDecl :: Parser Token Field
-parseFieldDecl =     ((staticParser +.+ parseType +.+ parseFieldName +.+ (lexem ASSIGN) +.+ parseExpr +.+ (lexem SEMICOLON))
-                        <<< (\(stc, (tpe, (name, (_, (expr, _))))) -> Field {ftype = tpe, fstatic = stc, fname = name, finit = Just expr}))
-                 ||| ((staticParser +.+ parseType +.+ parseFieldName +.+ (lexem SEMICOLON))
-                        <<< (\(stc, (tpe, (name, _))) -> Field {ftype = tpe, fstatic = stc, fname = name, finit = Nothing}))
+parseFieldDecl =     ((parseVisibility +.+ staticParser +.+ parseType +.+ parseFieldName +.+ (lexem ASSIGN) +.+ parseExpr +.+ (lexem SEMICOLON))
+                        <<< (\(vis, (stc, (tpe, (name, (_, (expr, _)))))) -> Field {faccess = vis, ftype = tpe, fstatic = stc, fname = name, finit = Just expr}))
+                 ||| ((parseVisibility +.+ staticParser +.+ parseType +.+ parseFieldName +.+ (lexem SEMICOLON))
+                        <<< (\(vis, (stc, (tpe, (name, _)))) -> Field {faccess = vis, ftype = tpe, fstatic = stc, fname = name, finit = Nothing}))
 
 {-----------------------------------------------------------------------------}
 {- # Statements --------------------------------------------------------------}
@@ -309,7 +309,7 @@ parseType =     ((lexem CHAR) <<< (\_ -> Char))
 {- # Visibilities ------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-parseVisibility :: Parser Token Visibility 
+parseVisibility :: Parser Token AccessModifier 
 parseVisibility =     ((lexem PUBLIC) <<< (\_ -> Public))
                   ||| ((lexem PRIVATE) <<< (\_ -> Private))
                   ||| ((lexem PROTECTED) <<< (\_ -> Package)) -- maybe in future: package
