@@ -6,10 +6,10 @@ import Data.Char
 
 
 lexWithIndex :: String -> [PositionedToken]
-lexWithIndex = filterIndexedTokens . indexTokens . lexer 
+lexWithIndex = filterIndexedTokens . indexTokens . validateTokens . lexer 
 
 lexWithoutIndex :: String -> [Token] 
-lexWithoutIndex = filterTokens . lexer
+lexWithoutIndex = filterTokens . validateTokens . lexer
 
 
 lexer :: String -> [Token]
@@ -22,7 +22,7 @@ lexer (c:cs)
       | isSpace c = lexer cs        -- skip ' ', \t, \n, \r, \f, \v
       | isAlpha c = lexVar (c:cs)   -- lex Bool, Char, id...
       | isDigit c = lexNum (c:cs)   -- lex a number 
-      | (c == '"') = lexStr (cs)    -- lex a String
+   -- | (c == '"') = lexStr (cs)    -- lex a String
 
 lexer ('!':'=':cs) = NOTEQUAL : lexer cs
 --lexer ('+':'=':cs) = PLUSEQUAL : lexer cs
@@ -74,13 +74,17 @@ lexer ('|' : '|' : cs) = OR : lexer cs
 lexer ('=':cs) = ASSIGN : lexer cs
 
 
+
+
 lexNum :: String -> [Token]
 lexNum cs = INTLITERAL (read num) : lexer rest
       where (num,rest) = span isDigit cs
 
+{-
 lexStr :: String -> [Token]
 lexStr cs = STRINGLITERAL (read str) : lexer rest
        where (str,rest) = span ((/=) '"') cs
+-}
 
 lexVar :: String -> [Token]
 lexVar cs =
@@ -159,3 +163,15 @@ indexTokens list = indexTokensRec 0 list where
 -- should be redundant, because indexTokens already filters all NEWLINE's
 filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
 filterIndexedTokens = filter (\posTkn -> token posTkn /= NEWLINE)
+
+-- validation 
+
+isValidInt :: Integer -> Bool
+isValidInt num = (num <= 2147483647) && (num >= -2147483648)
+
+validateTokens :: [Token] -> [Token]
+validateTokens [] = []
+validateTokens ((INTLITERAL x) : tkns) = if isValidInt x then INTLITERAL x : validateTokens tkns else 
+   error (show x ++ " is out of range for int")
+
+validateTokens (tkn : tkns) = tkn : validateTokens tkns
