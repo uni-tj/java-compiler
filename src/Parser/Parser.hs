@@ -1,3 +1,4 @@
+
 module Parser.Parser(parser) where
 
 import Types.Core
@@ -12,7 +13,7 @@ dummyPos :: Position
 dummyPos = Position {start = (0,0), end = (0,0)}
 
 {-----------------------------------------------------------------------------}
-{- # "Meta" functions -}
+{-- # main functionalities -}
 {-----------------------------------------------------------------------------}
 
 parser :: String -> Program
@@ -25,7 +26,7 @@ correctSols :: [(t, [a])] -> [(t, [a])]
 correctSols sols = (filter (\(_, resttokens) -> null resttokens)) sols
 
 {-----------------------------------------------------------------------------}
-{- # Program Definition ------------------------------------------------------}
+{-- # Program Definition ------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 
@@ -33,7 +34,7 @@ parseProgram :: Parser Token Program
 parseProgram = many parseClass
 
 {-----------------------------------------------------------------------------}
-{- # Class Definitions -------------------------------------------------------}
+{-- # Class Definitions -------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 --standard supertype: "Object" if not declared otherwise
@@ -72,23 +73,22 @@ parseClassEntry =  (parseMethodDecl <<< \mthd -> (ClassMethod mthd))
                ||| (parseFieldDecl <<< \fld -> (ClassField fld))
 
 {-----------------------------------------------------------------------------}
-{- # Methods -----------------------------------------------------------------}
+{-- # Methods -----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 staticParser :: Parser Token Bool -- rename to parseStatic
 staticParser = ((lexem STATIC) <<< (\_ -> True)) ||| (succeed False)
 
 parseMethodDecl :: Parser Token Method
-parseMethodDecl =     ((parseVisibility +.+ staticParser +.+ parseType +.+ parseMethodName +.+ (lexem LBRACE) 
+parseMethodDecl =     ((parseVisibility +.+ staticParser +.+ parseType +.+ parseMethodName +.+ (lexem LBRACE) -- parsing regular method decl
                         +.+ parseMethodParams +.+ (lexem RBRACE) +.+ parseBlock) 
                             <<< (\(vis,(stc, (retType,( name, (_, (params, (_, block))))))) 
                                 -> Method {maccess = vis, mtype = retType, mstatic = stc, mname = name,
-                                    mparams = params, mbody = block}))
-
-                  ||| ((parseVisibility +.+ parseMethodName +.+ (lexem LBRACE) +.+ parseMethodParams 
+                                    mparams = params, mbody = block}))          
+                  ||| ((parseVisibility +.+ parseMethodName +.+ (lexem LBRACE) +.+ parseMethodParams   -- parsing a constructor
                         +.+ (lexem RBRACE) +.+ parseBlock)
                             <<< (\(vis,(name, (_, (params, (_, block))))) 
-                                -> Method {maccess = vis, mtype = Void, mstatic = False, mname = name, 
+                                -> Method {maccess = vis, mtype = (Instance name), mstatic = False, mname = name, 
                                     mparams = params, mbody = block}))
 
 
@@ -104,7 +104,7 @@ parseMethodParams =     (succeed [])
 
 
 {-----------------------------------------------------------------------------}
-{- # Fields ------------------------------------------------------------------}
+{-- # Fields ------------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 parseFieldDecl :: Parser Token Field
@@ -114,13 +114,14 @@ parseFieldDecl =     ((parseVisibility +.+ staticParser +.+ parseType +.+ parseF
                         <<< (\(vis, (stc, (tpe, (name, _)))) -> Field {faccess = vis, ftype = tpe, fstatic = stc, fname = name, finit = Nothing}))
 
 {-----------------------------------------------------------------------------}
-{- # Statements --------------------------------------------------------------}
+{-- # Statements --------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 parseStmt :: Parser Token Stmt 
 parseStmt =     parseReturn
             ||| parseBlock 
-            ||| parseWhile 
+            ||| parseWhile
+ --         ||| parseForLoop
             ||| parseLocalVarDecl
             ||| parseIf 
             ||| parseStmtOrExprAsStmt
@@ -155,7 +156,7 @@ parseStmtOrExprAsStmt :: Parser Token Stmt
 parseStmtOrExprAsStmt = (parseStmtOrExpr +.+ (lexem SEMICOLON)) <<< (\(stOrEx, _) -> (StmtOrExprAsStmt dummyPos stOrEx))
 
 {-----------------------------------------------------------------------------}
-{- # StmtOrExpr --------------------------------------------------------------}
+{-- # StmtOrExpr --------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 
@@ -191,7 +192,7 @@ parseCallParams =     succeed []
               ||| ((parseExpr +.+ (lexem COMMA) +.+ parseCallParams ) <<< (\(expr, (_, exprs)) -> (expr : exprs)))
 
 {-----------------------------------------------------------------------------}
-{- # Expression --------------------------------------------------------------}
+{-- # Expression --------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 data RightSideExpr  = RSbExpr BinOperator Expr --binop:Expr
@@ -293,7 +294,7 @@ parseLiteralAsLiteral =     (((lexemParam (INTLITERAL intLit)) <<< (\(INTLITERAL
                         ||| (((lexem JNULL) <<< (\_ -> Null)))
 
 {-----------------------------------------------------------------------------}
-{- # Types -------------------------------------------------------------------}
+{-- # Types -------------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 -- parameter of type (IDENTIFIER __) are ignored
@@ -306,7 +307,7 @@ parseType =     ((lexem CHAR) <<< (\_ -> Char))
             ||| (((lexem STRING) +.+ (lexem LSQRBRACKET) +.+ (lexem RSQRBRACKET)) <<< (\_ -> StringArr))
 
 {-----------------------------------------------------------------------------}
-{- # Visibilities ------------------------------------------------------------}
+{-- # Visibilities ------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 parseVisibility :: Parser Token AccessModifier 
@@ -316,7 +317,7 @@ parseVisibility =     ((lexem PUBLIC) <<< (\_ -> Public))
                   ||| succeed Package                         -- default: package
 
 {-----------------------------------------------------------------------------}
-{- # Identifier names --------------------------------------------------------}
+{-- # Identifier names --------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
 
