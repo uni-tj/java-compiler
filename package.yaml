@@ -14,9 +14,10 @@ dependencies:
   - bytestring
   - mtl
   - containers
-  - uulib  
+  - uulib
   - text
   - binary
+  - extra >= 1.7.13
 
 ghc-options:
   - -Wall
@@ -34,14 +35,14 @@ library:
 
 executables:
   JavaCompiler-exe:
-    main:                Main.hs
-    source-dirs:         app
+    main: Main.hs
+    source-dirs: app
     ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
     dependencies:
-    - JavaCompiler
+      - JavaCompiler
 
 tests:
   JavaCompiler-test:

@@ -4,57 +4,69 @@
 module Types.AST where
 import           Types.Core
 
+type Program = [Class]
+
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
-  { cvisibility :: Visibility
-  , cname       :: ClassName
+  { caccess  :: AccessModifier
+  , cname    :: ClassName
   -- not required
-  , cextends    :: ClassName
-  , cfields     :: [Field]
-  , cmethods    :: [Method]
+  , cextends :: ClassName
+  , cfields  :: [Field]
+  , cmethods :: [Method]
   }
+  deriving (Show, Eq, Ord)
 
 data Field = Field
-  { ftype :: Type
-  , fname :: FieldName
-  , finit :: Maybe Expr
+  { faccess :: AccessModifier
+  , fstatic :: Bool
+  , ftype   :: Type
+  , fname   :: FieldName
+  , finit   :: Maybe Expr
   }
+  deriving (Show, Eq, Ord)
 data Method = Method
-  { mvisibility :: Visibility
-  , mtype       :: Type
-  , mstatic     :: Bool
-  , mname       :: FieldName
-  , mparams     :: [(Type, LocalName)]
-  , mbody       :: Stmt
+  { maccess :: AccessModifier
+  , mstatic :: Bool
+  , mtype   :: Type
+  , mname   :: FieldName
+  , mparams :: [(Type, LocalName)]
+  , mbody   :: Stmt
   }
+  deriving (Show, Eq, Ord)
 
 data Stmt
-  = Block [Stmt]
-  | Return Expr
-  | While Expr Stmt
-  | LocalVarDecl Type LocalName (Maybe Expr)
-  | If Expr Stmt (Maybe Stmt)
-  | StmtOrExprAsStmt StmtOrExpr
+  = Block Position [Stmt]
+  | Return Position (Maybe Expr)
+  | While Position Expr Stmt
+  | LocalVarDecl Position Type LocalName (Maybe Expr)
+  | If Position Expr Stmt (Maybe Stmt)
+  | StmtOrExprAsStmt Position StmtOrExpr
+  deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = Assign Expr Expr
+  = Assign (Maybe Expr) LocalOrFieldName Expr
   | New ClassName [Expr]
-  | MethodCall Expr MethodName [Expr]
+  | MethodCall (Maybe Expr) MethodName [Expr]
+  deriving (Show, Eq, Ord)
 
 data Expr
-  = This
-  | Super
-  | Name LocalOrFieldOrClassName
-  | FieldAccess Expr FieldName
-  | Unary UnOparator Expr
-  | Binary BinOperator Expr Expr
-  | Literal Literal
-  | StmtOrExprAsExpr StmtOrExpr
+  = This Position
+  | Super Position
+  | Name Position LocalOrFieldOrClassName
+  | FieldAccess Position Expr FieldName
+  | Unary Position UnOparator Expr
+  | Binary Position BinOperator Expr Expr
+  | Literal Position Literal
+  | StmtOrExprAsExpr Position StmtOrExpr
+  deriving (Show, Eq, Ord)
 data Literal
   = IntLit Integer
   | CharLit Char
   | BoolLit Bool
   | Null
+  deriving (Show, Eq, Ord)
 
-type Program = [Class]
+data Position = Position { start :: (Integer, Integer), end :: (Integer, Integer) }
+  deriving (Show, Eq, Ord)
