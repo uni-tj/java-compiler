@@ -207,8 +207,6 @@ checkExpr ctx (AST.Unary _ op expr) = do
     where types =
             [ ((Plus        , Int ), Int )
             , ((Minus       , Int ), Int )
-            , ((PreIncrement, Int ), Int )
-            , ((PreDecrement, Int ), Int )
             , ((LNot        , Bool), Bool)
             ]
 checkExpr ctx (AST.Binary _ op expr1 expr2) = do

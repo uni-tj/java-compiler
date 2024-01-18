@@ -27,8 +27,6 @@ data AccessModifier = Public | Package | Protected | Private
 data UnOparator
   = Plus
   | Minus
-  | PreIncrement -- prefix
-  | PreDecrement -- prefix
   | LNot
   deriving (Show, Eq, Ord)
 data BinOperator
