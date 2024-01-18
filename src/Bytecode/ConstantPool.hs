@@ -59,8 +59,8 @@ convertTypeToString Core.Char = "C"
 convertTypeToString Core.Bool = "Z"
 convertTypeToString Core.Void = "V"
 convertTypeToString Core.NullType = ""
+convertTypeToString (Core.Instance cname) = "L" ++ cname ++ ";"
 convertTypeToString (Core.Class cname) = "L" ++ cname ++ ";"
-convertTypeToString (Core.StaticClass cname) = "L" ++ cname ++ ";"
 convertTypeToString Core.StringArr = "[Ljava/lang/String;"
 
 -- TODO Checking StringArray Issues andPrintln
@@ -98,7 +98,7 @@ fieldDescriptor :: Type -> String
 fieldDescriptor = convertTypeToString
 
 insertField :: Int -> TAST.Field -> ConstantPoolState Int
-insertField cIdx (TAST.Field ftype fname finit) = do
+insertField cIdx (TAST.Field _ _ ftype fname finit) = do
   fnameIdx <- insertUtf8 fname
   ftypeIdx <- insertUtf8 $ fieldDescriptor ftype
 
@@ -117,6 +117,46 @@ insertField cIdx (TAST.Field ftype fname finit) = do
         index_nameandtype_cp = ntIdx,
         desc = ""
       }
+
+--- !! WIP !!
+traverseStmt :: TAST.Stmt -> ConstantPoolState ()
+traverseStmt (TAST.Block stmts) = mapM_ traverseStmt stmts
+traverseStmt (TAST.Return maybeExpr) = maybe (return ()) traverseExpr maybeExpr
+traverseStmt (TAST.While expr stmt) = traverseExpr expr >> traverseStmt stmt
+traverseStmt (TAST.LocalVarDecl _ _ maybeExpr) = maybe (return ()) traverseExpr maybeExpr
+traverseStmt (TAST.If expr stmt1 maybeStmt) = do
+  traverseExpr expr
+  traverseStmt stmt1
+  maybe (return ()) traverseStmt maybeStmt
+traverseStmt (TAST.StmtOrExprAsStmt stmtOrExpr) = traverseStmtOrExpr stmtOrExpr
+
+traverseExpr :: TAST.Expr -> ConstantPoolState ()
+traverseExpr (TAST.This _) = return ()
+traverseExpr (TAST.Super _) = return ()
+traverseExpr (TAST.Name _ name) = insertUtf8 name
+traverseExpr (TAST.FieldAccess _ expr fieldName) = traverseExpr expr >> insertUtf8 fieldName
+traverseExpr (TAST.Unary _ _ expr) = traverseExpr expr
+traverseExpr (TAST.Binary _ _ expr1 expr2) = traverseExpr expr1 >> traverseExpr expr2
+traverseExpr (TAST.Literal _ lit) = traverseLit lit
+traverseExpr (TAST.StmtOrExprAsExpr _ stmtOrExpr) = traverseStmtOrExpr stmtOrExpr
+
+traverseStmtOrExpr :: TAST.StmtOrExpr -> ConstantPoolState ()
+traverseStmtOrExpr (TAST.Assign maybeExpr name expr) = do
+  maybe (return ()) traverseExpr maybeExpr
+  insertUtf8 name
+  traverseExpr expr
+traverseStmtOrExpr (TAST.New className exprs) = do
+  insertUtf8 className
+  mapM_ traverseExpr exprs
+traverseStmtOrExpr (TAST.MethodCall maybeExpr methodName args) = do
+  maybe (return ()) traverseExpr maybeExpr
+  insertUtf8 methodName
+  mapM_ (traverseExpr . snd) args
+
+traverseLit :: TAST.Literal -> ConstantPoolState ()
+traverseLit = return ()
+
+-- !! WIP
 
 buildConstantPool :: TAST.Class -> ConstantPoolState ConstantPool
 buildConstantPool (TAST.Class _ cname _ cfields cmethods) = do

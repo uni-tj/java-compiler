@@ -14,8 +14,8 @@ testClass =
       TAST.cname = "TestClass",
       TAST.cextends = "",
       TAST.cfields =
-        [ TAST.Field Core.Int "IntField" Nothing,
-          TAST.Field Core.Int "StringField" Nothing
+        [ TAST.Field Core.Public False Core.Int "IntField" Nothing,
+          TAST.Field Core.Public False Core.Int "StringField" Nothing
         ],
       TAST.cmethods =
         []
@@ -29,7 +29,7 @@ testMethodDescriptor1 =
    in (res == expectedDescriptor, res)
 
 emptyBody :: TAST.Stmt
-emptyBody = TAST.Block Core.Void []
+emptyBody = TAST.Block []
 
 testMethodDescriptor2 :: (Bool, String)
 testMethodDescriptor2 =
