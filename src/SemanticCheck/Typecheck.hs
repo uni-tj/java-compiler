@@ -1,6 +1,7 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use mapAndUnzipM" #-}
-module Typecheck(checkProgram) where
+module SemanticCheck.Typecheck(checkProgram) where
 
 import           Control.Monad.Except (Except, MonadError (throwError),
                                        runExcept)
@@ -288,7 +289,8 @@ lookupMethod Ctx{cIass=cIassCtx} args' name cIass = do
     liftBool ("Access of method " ++ name ++ " is not permitted from class " ++ AST.cname cIassCtx ++ ".")
     $ AST.cname cIassCtx == AST.cname cIass || AST.maccess method <= Package
   return mmethod
-  where chooseOverload mm1 m2 = case (mm1, m2 `isApplicableTo` args') of
+  where chooseOverload :: Maybe AST.Method -> AST.Method -> Excepting (Maybe AST.Method)
+        chooseOverload mm1 m2 = case (mm1, m2 `isApplicableTo` args') of
           (Nothing, False) -> return Nothing
           (Nothing, True ) -> return $ Just m2
           (Just m1, False) -> return $ Just m1
