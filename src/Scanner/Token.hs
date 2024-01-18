@@ -1,4 +1,6 @@
-module Scanner.Token (Token(..), IndexedToken(..)) where 
+module Scanner.Token (Token(..), PositionedToken(..)) where
+
+import Types.AST -- to access Position type
 
 
 data Token
@@ -93,5 +95,5 @@ data Token
 
 
 -- represents Token with line-number in source-file
-data IndexedToken = IndexedToken
- { index :: Integer, token :: Token } deriving (Show, Eq)
+data PositionedToken = PositionedToken
+ { position :: Position, token :: Token } deriving (Show, Eq)

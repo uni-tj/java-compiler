@@ -1,10 +1,11 @@
 module Scanner.Lexer (lexWithIndex, lexWithoutIndex) where 
 
 import Scanner.Token
+import Types.AST -- for Position type
 import Data.Char
 
 
-lexWithIndex :: String -> [IndexedToken]
+lexWithIndex :: String -> [PositionedToken]
 lexWithIndex = filterIndexedTokens . indexTokens . lexer 
 
 lexWithoutIndex :: String -> [Token] 
@@ -139,16 +140,22 @@ lexInLineComment (x : xs) = lexInLineComment xs
 
 -- filtering a Token list to not contain NEWLINE's anymore
 filterTokens :: [Token] -> [Token]
-filterTokens list = filter (\tkn -> (tkn /= NEWLINE)) list
+filterTokens = filter (/= NEWLINE)
+
+--placeholder for position
+dummyPos :: Integer 
+dummyPos = 0
 
 -- indexing Tokens based on occurences of NEWLINE token (will be removed)
-indexTokens :: [Token] -> [IndexedToken]
+indexTokens :: [Token] -> [PositionedToken]
 indexTokens [] = [] 
 indexTokens list = indexTokensRec 0 list where 
     indexTokensRec _ [] = [] 
     indexTokensRec idx (NEWLINE : tkns) = indexTokensRec (idx + 1) tkns
-    indexTokensRec idx (tkn : tkns) = (IndexedToken idx tkn) : indexTokensRec idx tkns 
+    indexTokensRec idx (tkn : tkns) = 
+      PositionedToken { position = Position {start = (idx, dummyPos), end = (idx, dummyPos)},
+         token = tkn } : indexTokensRec idx tkns
 
 -- should be redundant, because indexTokens already filters all NEWLINE's
-filterIndexedTokens :: [IndexedToken] -> [IndexedToken]
-filterIndexedTokens list = filter (\idxtkn -> (token idxtkn /= NEWLINE)) list
+filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
+filterIndexedTokens = filter (\posTkn -> token posTkn /= NEWLINE)
