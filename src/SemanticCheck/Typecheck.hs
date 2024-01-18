@@ -41,7 +41,8 @@ class Typed a where
 instance Typed TAST.Expr where
   typee (TAST.This _type)               = _type
   typee (TAST.Super _type)              = _type
-  typee (TAST.Name _type _)             = _type
+  typee (TAST.LocalVar _type _)         = _type
+  typee (TAST.ClassRef _type _)         = _type
   typee (TAST.FieldAccess _type _ _)    = _type
   typee (TAST.Unary _type _ _)          = _type
   typee (TAST.Binary _type _ _ _)       = _type
@@ -181,13 +182,16 @@ checkExpr Ctx{static, cIass} (AST.This _) = do
   return $ TAST.This (Instance $ AST.cname cIass)
 checkExpr _ (AST.Super _) = throwError "super is currently unsupported."
 checkExpr ctx@Ctx{static, locals, cIass} (AST.Name pos name) = do
-  tresult <- case (Map.lookup name locals, runExcept $ lookupField ctx name cIass, lookupClass ctx name) of
-    (Just t , _             , _      ) -> return t
+  case (Map.lookup name locals, runExcept $ lookupField ctx name cIass, lookupClass ctx name) of
+    (Just t , _             , _      ) -> return $ TAST.LocalVar t name
     (Nothing, Left err      , _      ) -> throwError err
-    (Nothing, Right (Just f), _      ) -> fcheckStatic static f >> return (AST.ftype f)
-    (Nothing, Right Nothing , Just c ) -> return $ Class (AST.cname c)
+    (Nothing, Right (Just f), _      ) -> do
+                                          fcheckStatic static f
+                                          let this' = TAST.This (Instance cIassName)
+                                          return $ TAST.FieldAccess (AST.ftype f) this' name
+    (Nothing, Right Nothing , Just c ) -> return $ TAST.ClassRef (Class $ AST.cname c) (AST.cname c)
     (Nothing, Right Nothing , Nothing) -> throwError $ "Name " ++ name ++ " not found at " ++ show pos
-  return $ TAST.Name tresult name
+  where cIassName = AST.cname cIass
 checkExpr ctx (AST.FieldAccess _ expr name) = do
   expr' <- checkExpr ctx expr
   (tstatic, tname) <- unpackClassType expr'
@@ -256,22 +260,25 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr _ (AST.Assign mleft name right))
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.Assign mleft' name right'
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.New name args)) = do
   args' <- mapM (checkExpr ctx) args
-  params <- AST.mparams <$> (resolveMethod ctx args' name =<< resolveClass ctx name)
-  checkArgs args' params
+  constructor <- resolveMethod ctx args' name =<< resolveClass ctx name
+  checkArgs args' $ AST.mparams constructor
   let tresult = Instance name
-  return $ TAST.StmtOrExprAsExpr tresult $ TAST.New name args'
+  let tparams = fst <$> AST.mparams constructor
+  return $ TAST.StmtOrExprAsExpr tresult $ TAST.New name (zip tparams args')
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
   mexpr' <- mapM (checkExpr ctx) mexpr
+  let expr' = flip fromMaybe mexpr' $ if static ctx
+      then TAST.ClassRef (Class cIassName) cIassName
+      else TAST.This (Instance cIassName)
   args' <- mapM (checkExpr ctx) args
-  (tstatic, tname) <- case mexpr' of
-              Just expr' -> unpackClassType expr'
-              Nothing    -> return (static ctx, AST.cname $ cIass ctx)
+  (tstatic, tname) <- unpackClassType expr'
   method <- resolveMethod ctx args' name =<< resolveClass ctx tname
   mcheckStatic tstatic method
   checkArgs args' $ AST.mparams method
   let tresult = AST.mtype method
   let tparams = fst <$> AST.mparams method
-  return $ TAST.StmtOrExprAsExpr tresult $ TAST.MethodCall mexpr' name (zip tparams args')
+  return $ TAST.StmtOrExprAsExpr tresult $ TAST.MethodCall expr' name (zip tparams args')
+  where cIassName = AST.cname $ cIass ctx
 
 {- typecheck helper functions
 -}

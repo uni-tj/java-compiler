@@ -48,14 +48,15 @@ data Stmt
 
 data StmtOrExpr
   = Assign (Maybe Expr) LocalOrFieldName Expr
-  | New ClassName [Expr]
-  | MethodCall (Maybe Expr) MethodName [(Type, Expr)]
+  | New ClassName [(Type, Expr)]
+  | MethodCall Expr MethodName [(Type, Expr)]
   deriving (Show, Eq, Ord)
 
 data Expr
   = This Type
   | Super Type
-  | Name Type LocalOrFieldOrClassName
+  | LocalVar Type LocalName
+  | ClassRef Type ClassName
   | FieldAccess Type Expr FieldName
   | Unary Type UnOparator Expr
   | Binary Type BinOperator Expr Expr
