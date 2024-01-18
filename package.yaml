@@ -14,6 +14,8 @@ dependencies:
   - bytestring
   - mtl
   - containers
+  - uulib  
+  - text
   - binary
 
 ghc-options:

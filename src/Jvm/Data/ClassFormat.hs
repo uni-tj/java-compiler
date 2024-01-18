@@ -112,7 +112,7 @@ data CP_Info
         cad_cp :: String,
         desc :: String
       }
-  deriving (Show)
+  deriving (Show, Eq)
 
 showCP_Infos :: [CP_Info] -> Int -> String
 showCP_Infos [] n = ""
@@ -130,7 +130,7 @@ data Tag
   | TagDouble
   | TagNameAndType
   | TagUtf8
-  deriving (Show)
+  deriving (Show, Eq)
 
 data AccessFlags = AccessFlags [Int]
   deriving (Show)
