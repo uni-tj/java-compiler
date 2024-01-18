@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use null" #-}
 
@@ -79,6 +78,7 @@ codeGen = do
 
 -- Function to get all local variable and store the number (index in array) of the local variable
 -- -> in order to find them later
+-- Todo: "This" must be index 0, than function paras -> class.method(a,b) -> this=0 a=1 b=2, ... (localvar decs)
 type LocalVarArrType = [(String, Types.Core.Type)]
 localVarGen :: Stmt -> LocalVarArrType
 localVarGen (Block blocks) = concatMap localVarGen blocks
@@ -90,7 +90,8 @@ localVarGen (StmtOrExprAsStmt _) = []
 
 codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
-codeGenStmt (Return expr, localVarArr) = [0]
+
+codeGenStmt (Return mexpr, localVarArr) = [0] -- areturn / ireturn
 
 codeGenStmt (While expr stmt, localVarArr) = do
   -- expr(ending up true/false -> 1 or 0 on stack) --- 153, 0, len(stmt) --- stmt
@@ -106,10 +107,11 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
       case i of
         Just index ->
           case varType of
-            -- 54 -> istore + numer of local var
+            -- 196 -> wide 54 -> istore + numer of local var
             Types.Core.Int -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Bool -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Char -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
+            Types.Core.Instance instanceName -> [] -- Todo: var = new class
             _ -> []
         Nothing -> []
     Nothing -> []
@@ -125,20 +127,6 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
     codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3 + 3) ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt + 3) ++ codeElseStmt
   else
     codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3) ++ codeStmt
-
-
-  -- let codeExpr = codeGenExpr (expr, localVarArr)
-  -- let codeStmt = codeGenStmt (stmt, localVarArr)
-
-  -- let codeElseStmt = case mStmt of
-  --     Just elseStmt -> codeGenStmt (stmt, localVarArr)
-  --   Nothing -> []
-
-
-  -- let codeIf = 153 : splitLenInTwoBytes (length codeStmt + 2 + 3) -- +3 because of goto
-
-  -- 
-  -- codeExpr ++ codeIf ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt) ++ codeElseStmt
 
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
@@ -156,6 +144,8 @@ codeGenExpr (Name localOrFieldOrClassType localOrFieldOrClassName, localVarArr) 
         Types.Core.Int -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
         Types.Core.Bool -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
         Types.Core.Char -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
+        Types.Core.Instance instantName-> [] -- Todo: Search localOrFieldOrClassName in localVarArr
+        Types.Core.Class className -> [] -- Todo: Push with aload ref from const pool from the class on stack
     Nothing -> []
 
 codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = [0] -- expr for this or class or what ever "class a a.j"
@@ -182,7 +172,6 @@ codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = [0
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
-  -- Todo: How to get parameters? Like class a -> a.i
   let mExprCode =
         case mExpr of
           Just justExpr ->
@@ -200,7 +189,6 @@ codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
 codeGenStmtOrExpr (New className exprs, localVarArr) = [] -- Todo: Need const pool
 
 codeGenStmtOrExpr (MethodCall mExpr methodName exprs, localVarArr) = [] -- Todo: Need const pool
-
 
 codeGenBinOperator:: BinOperator -> [Int]
 codeGenBinOperator Add = [96]
@@ -220,8 +208,8 @@ codeGenBinOperator NEQ = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, 
 codeGenUnOparator:: UnOparator -> [Int]
 codeGenUnOparator Plus = [] -- Todo: +i? -> Do nothing?
 codeGenUnOparator Minus = [116] -- Todo: -i? -> Use INEG
-codeGenUnOparator PreIncrement = [4, 96] -- Todo: What to do in this case? Is it i++?
-codeGenUnOparator PreDecrement = [4, 100] -- Todo: What to do in this case? Is it i--?
+-- codeGenUnOparator PreIncrement = [4, 96] -- Todo: What to do in this case? Is it ++i?
+-- codeGenUnOparator PreDecrement = [4, 100] -- Todo: 
 codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
 
 codeGenLiteral :: Literal -> [Int]
