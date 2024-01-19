@@ -10,8 +10,7 @@ import qualified Types.TAST as TAST
 testClass :: TAST.Class
 testClass =
   TAST.Class
-    { TAST.cvisibility = Public,
-      TAST.cname = "TestClass",
+    { TAST.cname = "TestClass",
       TAST.cextends = "",
       TAST.cfields =
         [ TAST.Field Core.Public False Core.Int "IntField" Nothing,
@@ -38,10 +37,51 @@ testMethodDescriptor2 =
       res = methodDescriptor method
    in (res == expectedDescriptor, res)
 
+simpleClassTAST :: TAST.Class
+simpleClassTAST =
+  TAST.Class
+    Core.Public
+    "SimpleClass"
+    "java/lang/Object"
+    [ TAST.Field Core.Private False Core.Int "number" Nothing,
+      TAST.Field Core.Public True Core.Bool "flag" (Just (TAST.Literal Core.Bool (TAST.BoolLit False)))
+    ]
+    [ TAST.Method
+        Core.Public
+        Core.Int
+        False
+        "SimpleClass"
+        [(Core.Int, "initialNumber")]
+        ( TAST.Block
+            [ TAST.StmtOrExprAsStmt (TAST.Assign Nothing "number" (TAST.Name Core.Int "initialNumber"))
+            ]
+        ),
+      TAST.Method
+        Core.Public
+        Core.Int
+        False
+        "getNumber"
+        []
+        ( TAST.Block
+            [ TAST.Return (Just (TAST.Name Core.Int "number"))
+            ]
+        ),
+      TAST.Method
+        Core.Public
+        Core.Void
+        True
+        "setFlag"
+        [(Core.Bool, "newFlag")]
+        ( TAST.Block
+            [ TAST.StmtOrExprAsStmt (TAST.Assign Nothing "flag" (TAST.Name Core.Bool "newFlag"))
+            ]
+        )
+    ]
+
 main :: IO ()
 main = do
   let initialCp = []
-  let (_, finalCp) = runState (buildConstantPool testClass) initialCp
+  let (_, finalCp) = runState (buildConstantPool simpleClassTAST) initialCp
 
   _ <-
     ( mapM_
@@ -50,4 +90,5 @@ main = do
       )
 
   putStrLn $ show testMethodDescriptor1
-  putStrLn $ show testMethodDescriptor2
+
+-- putStrLn $ show testMethodDescriptor2
