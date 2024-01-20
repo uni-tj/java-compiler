@@ -3,9 +3,8 @@ module ByteCodeGen.JavaTestFiles.GGT.GgtTAST where
 import Types.TAST
 import Types.Core
 
-ggtErw :: Program
-ggtErw =
-  [ Types.TAST.Class
+ggtErw :: Class
+ggtErw = Types.TAST.Class
       { caccess = Public
       , cname = "ggtErw"
       , cextends = ""
@@ -15,7 +14,6 @@ ggtErw =
             mainMethod
         ]
       }
-  ]
 
 ggTMethod :: Method
 ggTMethod =

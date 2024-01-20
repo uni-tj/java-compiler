@@ -6,13 +6,15 @@ module ByteCodeGen.ByteCodeGen where
 import ByteCodeGen.Jvm.Data.ClassFormat
 import Types.TAST
 import Types.Core
-import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
+-- import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
+import ByteCodeGen.JavaTestFiles.GGT.GgtTAST (ggtErw)
 
 import Data.List (findIndex)
+import Data.Bits
 
 codeGen :: [Method_Info]
 codeGen = do
-  let methods = getMethodsFromClass testAst
+  let methods = getMethodsFromClass ggtErw
   let methodObjects = map createMethodObject methods
 
   methodObjects
@@ -139,15 +141,25 @@ localVarGenBody (LocalVarDecl localType localName _) = [(localName, localType)]
 localVarGenBody (If _ stmt mStmt) = localVarGenBody stmt ++ maybe [] localVarGenBody mStmt
 localVarGenBody (StmtOrExprAsStmt _) = []
 
-
 codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
 
-codeGenStmt (Return mexpr, localVarArr) = [0] -- areturn / ireturn
+codeGenStmt (Return mexpr, localVarArr) = do -- areturn / ireturn
+  case mexpr of
+    Just expr -> do
+      let (exprCode, t) = codeGenExpr (expr, localVarArr)
+      case t of
+        Types.Core.Int -> exprCode ++ [172]
+        Types.Core.Bool -> exprCode ++ [172]
+        Types.Core.Char -> exprCode ++ [172]
+        Types.Core.Instance instanceName -> exprCode ++ [176]
+        Types.Core.Class className -> exprCode ++ [176]
+        _ -> []
+    Nothing -> []
 
 codeGenStmt (While expr stmt, localVarArr) = do
   -- expr(ending up true/false -> 1 or 0 on stack) --- 153, 0, len(stmt) --- stmt
-  let codeExpr = codeGenExpr (expr, localVarArr)
+  let (codeExpr, t) = codeGenExpr (expr, localVarArr)
   let codeStmt = codeGenStmt (stmt, localVarArr)
   let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 3) -- 153 -> if value is 0, branch -- 3 for offset
   codeExpr ++ codeWhile ++ codeStmt
@@ -160,16 +172,22 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
         Just index ->
           case varType of
             -- 196 -> wide 54 -> istore + numer of local var
-            Types.Core.Int -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
-            Types.Core.Bool -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
-            Types.Core.Char -> codeGenExpr (expr, localVarArr) ++ [196, 54] ++ splitLenInTwoBytes index
-            Types.Core.Instance instanceName -> [] -- Todo: var = new class
+            Types.Core.Int -> do
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr)
+              codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
+            Types.Core.Bool -> do
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+              codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
+            Types.Core.Char -> do
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+              codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
+            Types.Core.Instance instanceName -> [] -- Todo: 58 astore? a = new x?
             _ -> []
         Nothing -> []
     Nothing -> []
 
 codeGenStmt (If expr stmt mStmt, localVarArr) =
-  let codeExpr = codeGenExpr (expr, localVarArr)
+  let (codeExpr, t) = codeGenExpr (expr, localVarArr)
       codeStmt = codeGenStmt (stmt, localVarArr)
       codeElseStmt = case mStmt of
         Just elseStmt -> codeGenStmt (elseStmt, localVarArr)
@@ -182,45 +200,49 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
 
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
-codeGenExpr :: (Expr, LocalVarArrType) -> [Int]
-codeGenExpr (This thisName, localVarArr) = [0]
+codeGenExpr :: (Expr, LocalVarArrType) -> ([Int], Type)
+codeGenExpr (This thisName, localVarArr) = ([42], Instance "This")
 
-codeGenExpr (Super superName, localVarArr) = [0]
+codeGenExpr (Super superName, localVarArr) = ([42], Instance "Super") -- Todo: I dont know if this is right
 
-codeGenExpr (LocalVar localOrFieldOrClassType localOrFieldOrClassName, localVarArr) = do
-  let i = findIndex ((== localOrFieldOrClassName) . fst) localVarArr
+codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
+  let i = findIndex ((== localVarName) . fst) localVarArr
   case i of
     Just index ->
-      case localOrFieldOrClassType of
-        Types.Core.Int -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
-        Types.Core.Bool -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
-        Types.Core.Char -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
-        Types.Core.Instance instantName-> [] -- Todo: Search localOrFieldOrClassName in localVarArr
-        Types.Core.Class className -> [] -- Todo: Push with aload ref from const pool from the class on stack
-        _ -> []
-    Nothing -> []
+      case localVarType of
+        Types.Core.Int -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
+        Types.Core.Bool -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
+        Types.Core.Char -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int ) -- wide, iload
+        Types.Core.Instance instantName-> ([], Instance instantName) -- Todo: Search localOrFieldOrClassName in localVarArr
+        -- Types.Core.Class className -> ([]) -- Todo: Push with aload ref from const pool from the class on stack
+        _ -> ([], localVarType)
+    Nothing -> ([], localVarType)
 
-codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = [0] -- expr for this or class or what ever "class a a.j"
+codeGenExpr (ClassRef cType cName, localVarArr) = ([0], cType)
+
+codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = ([0], fieldTyp) -- expr for this or class or what ever "class a a.j"
 
 codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do -- for actions with only one input var like not or ++
-  codeGenExpr (expr, localVarArr) ++ codeGenUnOparator unOparator
+  let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+  let codeUnary = codeExpr ++ codeGenUnOparator unOparator
+  (codeUnary, unaryType)
 
 codeGenExpr (Binary typeBinary binOperator expr0 expr1, localVarArr) = do
-  let codeExpr0 = codeGenExpr (expr0, localVarArr)
-  let codeExpr1 = codeGenExpr (expr1, localVarArr)
+  let (codeExpr0, t) = codeGenExpr (expr0, localVarArr)
+  let (codeExpr1, t) = codeGenExpr (expr1, localVarArr)
   let codeBinOperator = codeGenBinOperator binOperator
-  codeExpr0 ++ codeExpr1 ++ codeBinOperator
+  (codeExpr0 ++ codeExpr1 ++ codeBinOperator, typeBinary)
 
 -- Todo - only load const from pool and dont push numbers ?
 codeGenExpr (Literal literalType literal, localVarArr) = do
   case literalType of
     -- 54 -> istore + numer of local var
-    Types.Core.Int -> 17 : codeGenLiteral literal -- 17 sipush -> 2 Byte
-    Types.Core.Bool -> codeGenLiteral literal
-    Types.Core.Char -> codeGenLiteral literal
-    _ -> []
+    Types.Core.Int -> (17 : codeGenLiteral literal, literalType) -- 17 sipush -> 2 Byte
+    Types.Core.Bool -> (codeGenLiteral literal, literalType)
+    Types.Core.Char -> (codeGenLiteral literal, literalType)
+    _ -> ([], NullType)
 
-codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = [0] -- StmtOrExpr is assign, new
+codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = ([0], stmtOrExprAsExprType) -- StmtOrExpr is assign, new
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
@@ -229,9 +251,9 @@ codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
         case mExpr of
           Just justExpr ->
             codeGenExpr (justExpr, localVarArr)
-          Nothing -> []
+          Nothing -> ([], NullType)
 
-  let exprCode = codeGenExpr (expr, localVarArr)
+  let (exprCode, t) = codeGenExpr (expr, localVarArr)
 
   let i = findIndex ((== localOrFieldName) . fst) localVarArr
   case i of
@@ -271,8 +293,8 @@ codeGenLiteral (BoolLit bool) = if bool then [4] else [3] -- Push directly 1 (4)
 splitLenInTwoBytes :: Int -> [Int]
 splitLenInTwoBytes len = [highByte, lowByte]
   where
-    highByte = len `div` 256
-    lowByte = len `mod` 256
+    highByte = (len `shiftR` 8) .&. 0xFF
+    lowByte = len .&. 0xFF
 
 getMethodsFromClass :: Types.TAST.Class -> [Method]
 getMethodsFromClass = cmethods
@@ -283,22 +305,12 @@ getAccessFromClass = caccess
 getMbodyFromMethod :: Types.TAST.Method -> Stmt
 getMbodyFromMethod = mbody
 
-
 getAccessFlagsForMethod :: (Types.Core.AccessModifier, Bool) -> [Int]
 getAccessFlagsForMethod (accessFlags, methodStatic) =
   case accessFlags of
     Types.Core.Public -> 1 : methodStaticFlag
     Types.Core.Private -> 2 : methodStaticFlag
     Types.Core.Protected -> 4 : methodStaticFlag
-    _ -> [] -- Todo: Is this right?
+    _ -> methodStaticFlag -- Todo: Is this right?
   where
     methodStaticFlag = if methodStatic then [8] else []
-
-getAccessFlagsFromClass :: Types.TAST.Class -> AccessFlags
-getAccessFlagsFromClass classDef = AccessFlags (getAccessFlagsFromAccessModifierForClasses (caccess classDef))
-
-getAccessFlagsFromAccessModifierForClasses :: Types.Core.AccessModifier -> [Int]
-getAccessFlagsFromAccessModifierForClasses accessFlags =
-  case accessFlags of
-    Types.Core.Public -> [1,32]
-    _ -> [] -- Todo: Is this right?
