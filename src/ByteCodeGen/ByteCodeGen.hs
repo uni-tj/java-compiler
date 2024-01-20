@@ -242,7 +242,7 @@ codeGenExpr (Literal literalType literal, localVarArr) = do
     Types.Core.Char -> (codeGenLiteral literal, literalType)
     _ -> ([], NullType)
 
-codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = ([0], stmtOrExprAsExprType) -- StmtOrExpr is assign, new
+codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (codeGenStmtOrExpr (stmtOrExpr, localVarArr), stmtOrExprAsExprType)
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
@@ -271,7 +271,7 @@ codeGenStmtOrExpr (New className exprs, localVarArr) = [] -- Todo: Need const po
 
 codeGenStmtOrExpr (MethodCall expr methodName paras, localVarArr) = do -- Todo: Need const pool   
   let (codeExpr, t) = codeGenExpr (expr, localVarArr)
-  let methodIdCp = [0] -- Query cp
+  let methodIdCp = 0 -- Query cp
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
 
   -- Todo: Decide which of this to use based on what?
