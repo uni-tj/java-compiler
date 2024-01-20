@@ -176,10 +176,10 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
               let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Bool -> do
-              let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Char -> do
-              let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Instance instanceName -> [] -- Todo: 58 astore? a = new x?
             _ -> []
@@ -201,7 +201,7 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
 codeGenExpr :: (Expr, LocalVarArrType) -> ([Int], Type)
-codeGenExpr (This thisName, localVarArr) = ([42], Instance "This")
+codeGenExpr (This thisName, localVarArr) = ([42], Instance "This") -- Todo: I dont know if this is right
 
 codeGenExpr (Super superName, localVarArr) = ([42], Instance "Super") -- Todo: I dont know if this is right
 
@@ -223,7 +223,7 @@ codeGenExpr (ClassRef cType cName, localVarArr) = ([0], cType)
 codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = ([0], fieldTyp) -- expr for this or class or what ever "class a a.j"
 
 codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do -- for actions with only one input var like not or ++
-  let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+  let (codeExpr, t) = codeGenExpr (expr, localVarArr)
   let codeUnary = codeExpr ++ codeGenUnOparator unOparator
   (codeUnary, unaryType)
 
@@ -246,11 +246,10 @@ codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = ([
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
-  -- Todo: What to do with mExprCode
-  let mExprCode =
+  -- Todo: What to do with mExprCode - is it a fieldAccess than?
+  let (mExprCode, mT) =
         case mExpr of
-          Just justExpr ->
-            codeGenExpr (justExpr, localVarArr)
+          Just justExpr -> codeGenExpr (justExpr, localVarArr)
           Nothing -> ([], NullType)
 
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
@@ -258,12 +257,28 @@ codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
   let i = findIndex ((== localOrFieldName) . fst) localVarArr
   case i of
     Just index ->
-      exprCode ++ [196, 54] ++ splitLenInTwoBytes index
+      let codeStore = case t of
+            Types.Core.Int -> [196, 54]
+            Types.Core.Bool -> [196, 54]
+            Types.Core.Char -> [196, 54]
+            Types.Core.Instance instanceName -> [196, 58]
+            Types.Core.Class className -> [196, 58]
+            _ -> []
+      in exprCode ++ codeStore ++ splitLenInTwoBytes index
     Nothing -> []
 
 codeGenStmtOrExpr (New className exprs, localVarArr) = [] -- Todo: Need const pool
 
-codeGenStmtOrExpr (MethodCall mExpr methodName exprs, localVarArr) = [] -- Todo: Need const pool
+codeGenStmtOrExpr (MethodCall expr methodName paras, localVarArr) = do -- Todo: Need const pool   
+  let (codeExpr, t) = codeGenExpr (expr, localVarArr)
+  let methodIdCp = [0] -- Query cp
+  let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
+
+  -- Todo: Decide which of this to use based on what?
+  -- invokespecial 183 -- invokestatic 184 -- invokevirtual 182
+  let codeInvoke = [0]
+
+  codeExpr ++ codeParas ++ codeInvoke
 
 codeGenBinOperator:: BinOperator -> [Int]
 codeGenBinOperator Add = [96]
@@ -289,6 +304,7 @@ codeGenLiteral :: Literal -> [Int]
 codeGenLiteral (IntLit integer) = splitLenInTwoBytes (fromIntegral integer)
 codeGenLiteral (CharLit char) = [] -- Todo: What to do with char?
 codeGenLiteral (BoolLit bool) = if bool then [4] else [3] -- Push directly 1 (4) or 0 (3) 
+codeGenLiteral Null = []
 
 splitLenInTwoBytes :: Int -> [Int]
 splitLenInTwoBytes len = [highByte, lowByte]
