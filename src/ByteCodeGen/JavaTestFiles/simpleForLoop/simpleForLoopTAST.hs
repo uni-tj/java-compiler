@@ -25,7 +25,7 @@ testAst = Types.TAST.Class
               -- Binary Type BinOperator Expr Expr
               (Binary Types.Core.Bool
                 Types.Core.LT -- less than -> i < 5
-                  (Name Types.Core.Int "i") -- i
+                  (LocalVar Types.Core.Int "i") -- i
                   (Literal Types.Core.Int (IntLit 5))
               ) -- 5
               (Block 
@@ -38,7 +38,7 @@ testAst = Types.TAST.Class
                       -- Binary Type BinOperator Expr Expr
                       (Binary Types.Core.Int
                           Add 
-                          (Name Types.Core.Int "i")
+                          (LocalVar Types.Core.Int "i")
                           (Literal Types.Core.Int (IntLit 1))))
                           ,
                   -- -- New for tests

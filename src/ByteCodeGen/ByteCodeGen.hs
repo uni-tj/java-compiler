@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use null" #-}
+{-# HLINT ignore "Use list comprehension" #-}
 
 module ByteCodeGen.ByteCodeGen where
 import ByteCodeGen.Jvm.Data.ClassFormat
@@ -9,12 +10,12 @@ import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
 
 import Data.List (findIndex)
 
-codeGen :: [[Int]]
+codeGen :: [Method_Info]
 codeGen = do
   let methods = getMethodsFromClass testAst
-  let mbodys = map getMbodyFromMethod methods
-  let localVarArr = concatMap localVarGen mbodys
-  return (concatMap (\block -> codeGenStmt (block, localVarArr)) mbodys)
+  let methodObjects = map createMethodObject methods
+
+  methodObjects
 
   -- let classFileNew = ClassFile {
   --   magic = Magic,
@@ -76,17 +77,68 @@ codeGen = do
 
   -- print "End"
 
+createMethodObject:: Method -> Method_Info
+createMethodObject (Method methodAccess mtype methodStatic mname methodParams methodBody) = do
+  let accessFlags = getAccessFlagsForMethod (methodAccess, methodStatic)
+  let indexMethodName = 0 -- Todo: Query CP
+  let indexDescr = 0 -- Todo: Query CP
+  let attributeCode = createAttributeCode (methodStatic, methodParams, methodBody)
+
+  Method_Info {
+    af_mi = AccessFlags accessFlags,
+    index_name_mi = indexMethodName,
+    index_descr_mi = indexDescr,
+    tam_mi = 1,
+    array_attr_mi =
+      [
+        attributeCode
+      ]
+  }
+
+createAttributeCode :: (Bool, [(Type, LocalName)], Stmt) -> Attribute_Info
+createAttributeCode (methodStatic, params, body) = do
+  let indexNameAttr = 0 -- Query CP for Code
+
+  let localVarArr = localVarGen (methodStatic, params, body)
+  let methodCode = codeGenStmt (body, localVarArr)
+
+  AttributeCode {
+    index_name_attr = indexNameAttr, -- Code
+    tam_len_attr = length methodCode + 12, -- All bytes below
+    len_stack_attr = 0, -- Todo: Calc max stack
+    len_local_attr = length params + if methodStatic then 0 else 1,
+    tam_code_attr = length methodCode,
+    array_code_attr = methodCode,
+    tam_ex_attr = 0,
+    array_ex_attr = [],
+    tam_atrr_attr = 0,
+    array_attr_attr = []
+  }
+
 -- Function to get all local variable and store the number (index in array) of the local variable
 -- -> in order to find them later
 -- Todo: "This" must be index 0, than function paras -> class.method(a,b) -> this=0 a=1 b=2, ... (localvar decs)
 type LocalVarArrType = [(String, Types.Core.Type)]
-localVarGen :: Stmt -> LocalVarArrType
-localVarGen (Block blocks) = concatMap localVarGen blocks
-localVarGen (Return _) = []
-localVarGen (While _ stmt) = localVarGen stmt
-localVarGen (LocalVarDecl localType localName _) = [(localName, localType)]
-localVarGen (If _ stmt mStmt) = localVarGen stmt ++ maybe [] localVarGen mStmt
-localVarGen (StmtOrExprAsStmt _) = []
+localVarGen :: (Bool, [(Type, LocalName)], Stmt) -> LocalVarArrType
+localVarGen (methodStatic, params, body) = do
+  localVarGenMethodStatic methodStatic ++ localVarGenParams params ++ localVarGenBody body
+
+localVarGenMethodStatic:: Bool -> LocalVarArrType
+localVarGenMethodStatic methodStatic = if methodStatic then [] else [("This", Instance "This")] -- Todo: Is this right?
+
+localVarGenParams:: [(Type, LocalName)] -> LocalVarArrType
+localVarGenParams = map transform
+  where
+    transform (t, name) = (name, t)
+
+localVarGenBody :: Stmt -> LocalVarArrType
+localVarGenBody (Block blocks) = concatMap localVarGenBody blocks
+localVarGenBody (Return _) = []
+localVarGenBody (While _ stmt) = localVarGenBody stmt
+localVarGenBody (LocalVarDecl localType localName _) = [(localName, localType)]
+localVarGenBody (If _ stmt mStmt) = localVarGenBody stmt ++ maybe [] localVarGenBody mStmt
+localVarGenBody (StmtOrExprAsStmt _) = []
+
 
 codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
@@ -130,13 +182,12 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
 
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
-
 codeGenExpr :: (Expr, LocalVarArrType) -> [Int]
 codeGenExpr (This thisName, localVarArr) = [0]
 
 codeGenExpr (Super superName, localVarArr) = [0]
 
-codeGenExpr (Name localOrFieldOrClassType localOrFieldOrClassName, localVarArr) = do
+codeGenExpr (LocalVar localOrFieldOrClassType localOrFieldOrClassName, localVarArr) = do
   let i = findIndex ((== localOrFieldOrClassName) . fst) localVarArr
   case i of
     Just index ->
@@ -210,8 +261,6 @@ codeGenBinOperator NEQ = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, 
 codeGenUnOparator:: UnOparator -> [Int]
 codeGenUnOparator Plus = [] -- -> Do nothing
 codeGenUnOparator Minus = [116] -- Todo: -i? -> Use INEG
-codeGenUnOparator PreIncrement = [] -- -> Will be deleted
-codeGenUnOparator PreDecrement = [] -- -> Will be deleted
 codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
 
 codeGenLiteral :: Literal -> [Int]
@@ -228,14 +277,28 @@ splitLenInTwoBytes len = [highByte, lowByte]
 getMethodsFromClass :: Types.TAST.Class -> [Method]
 getMethodsFromClass = cmethods
 
+getAccessFromClass :: Types.TAST.Class -> AccessModifier
+getAccessFromClass = caccess
+
 getMbodyFromMethod :: Types.TAST.Method -> Stmt
 getMbodyFromMethod = mbody
 
-getAccessFlags :: Types.TAST.Class -> AccessFlags
-getAccessFlags classInstance = AccessFlags (getAccessFlagsFromVisibility (caccess classInstance))
 
-getAccessFlagsFromVisibility :: Types.Core.AccessModifier -> [Int]
-getAccessFlagsFromVisibility visibility =
-  case visibility of
+getAccessFlagsForMethod :: (Types.Core.AccessModifier, Bool) -> [Int]
+getAccessFlagsForMethod (accessFlags, methodStatic) =
+  case accessFlags of
+    Types.Core.Public -> 1 : methodStaticFlag
+    Types.Core.Private -> 2 : methodStaticFlag
+    Types.Core.Protected -> 4 : methodStaticFlag
+    _ -> [] -- Todo: Is this right?
+  where
+    methodStaticFlag = if methodStatic then [8] else []
+
+getAccessFlagsFromClass :: Types.TAST.Class -> AccessFlags
+getAccessFlagsFromClass classDef = AccessFlags (getAccessFlagsFromAccessModifierForClasses (caccess classDef))
+
+getAccessFlagsFromAccessModifierForClasses :: Types.Core.AccessModifier -> [Int]
+getAccessFlagsFromAccessModifierForClasses accessFlags =
+  case accessFlags of
     Types.Core.Public -> [1,32]
-    Types.Core.Package -> [1,32]
+    _ -> [] -- Todo: Is this right?
