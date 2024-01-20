@@ -146,6 +146,7 @@ codeGenExpr (Name localOrFieldOrClassType localOrFieldOrClassName, localVarArr) 
         Types.Core.Char -> [196, 21] ++ splitLenInTwoBytes index  -- wide, iload
         Types.Core.Instance instantName-> [] -- Todo: Search localOrFieldOrClassName in localVarArr
         Types.Core.Class className -> [] -- Todo: Push with aload ref from const pool from the class on stack
+        _ -> []
     Nothing -> []
 
 codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = [0] -- expr for this or class or what ever "class a a.j"
@@ -172,6 +173,7 @@ codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = [0
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
+  -- Todo: What to do with mExprCode
   let mExprCode =
         case mExpr of
           Just justExpr ->
@@ -206,10 +208,10 @@ codeGenBinOperator Types.Core.EQ = [100, 153, 0, 7, 3, 167, 0, 4, 4] -- iSub, if
 codeGenBinOperator NEQ = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, ICONST_0, GOTO end, label:, ICONST_1
 
 codeGenUnOparator:: UnOparator -> [Int]
-codeGenUnOparator Plus = [] -- Todo: +i? -> Do nothing?
+codeGenUnOparator Plus = [] -- -> Do nothing
 codeGenUnOparator Minus = [116] -- Todo: -i? -> Use INEG
--- codeGenUnOparator PreIncrement = [4, 96] -- Todo: What to do in this case? Is it ++i?
--- codeGenUnOparator PreDecrement = [4, 100] -- Todo: 
+codeGenUnOparator PreIncrement = [] -- -> Will be deleted
+codeGenUnOparator PreDecrement = [] -- -> Will be deleted
 codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
 
 codeGenLiteral :: Literal -> [Int]
