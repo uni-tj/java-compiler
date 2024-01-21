@@ -93,7 +93,6 @@ data Token
      | JNULL                    -- null
 
      | NEWLINE                  -- temporally holds information about positions
-     | CARRIGERET 
      | SPACE 
      | WRONGTOKEN String Int    -- error token with message and original size
      deriving (Show, Eq)

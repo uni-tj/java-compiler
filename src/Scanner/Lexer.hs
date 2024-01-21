@@ -21,7 +21,6 @@ lexer ('/' : '/' : xs) = lexInLineComment xs
 lexer ('/' : '*' : xs) = lexMulLineComment xs
 lexer (c:cs)
       | c == '\n' = NEWLINE : lexer cs    -- to remember the line number
-      | c == '\r' = CARRIGERET : lexer cs -- saving carrigeReturns 
       | c == ' ' = SPACE : lexer cs
       | c == '\t' = SPACE : lexer cs      -- mapping tabs to space characters
       | isSpace c = lexer cs              -- skip ' ', \t, \n, \r, \f, \v
@@ -152,10 +151,10 @@ dummyPos = 0
 -- indexing Tokens based on occurences of NEWLINE token (will be removed)
 indexTokens :: [Token] -> [PositionedToken]
 indexTokens [] = []
-indexTokens list = indexTokensRec 0 list where
-    indexTokensRec _ [] = []
-    indexTokensRec idx (NEWLINE : tkns) = indexTokensRec (idx + 1) tkns
-    indexTokensRec idx (tkn : tkns) =
+indexTokens list = indexTokensRec 0 0 list where
+    indexTokensRec _ _ [] = []
+    indexTokensRec vpos (NEWLINE : tkns) = indexTokensRec (vpos + 1) tkns
+    indexTokensRec vpos (vpos : tkns) =
       PositionedToken { position = Position {start = (idx, dummyPos), end = (idx, dummyPos)},
          token = tkn } : indexTokensRec idx tkns
 
