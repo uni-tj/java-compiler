@@ -55,8 +55,10 @@ data Token
      | IF                       -- if
      | WHILE                    -- while 
      | ELSE                     -- else
-     | CASE                     -- case (maybe not to implement)
-     | BREAK                    -- break
+     | CASE                     -- case (not to implement)
+     | BREAK                    -- break (not to implement)
+     | CONTINUE                 -- continue (not to implement)
+     | FOR                      -- for
 
      | RETURN                   -- return 
 
@@ -90,7 +92,10 @@ data Token
      | STRINGLITERAL String     -- ".."
      | JNULL                    -- null
 
-     | NEWLINE                  -- temporally holds information about line-numbers
+     | NEWLINE                  -- temporally holds information about positions
+     | CARRIGERET 
+     | SPACE 
+     | WRONGTOKEN String Int    -- error token with message and original size
      deriving (Show, Eq)
 
 

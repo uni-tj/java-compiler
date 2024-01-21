@@ -191,8 +191,8 @@ parseMethodCall = (((parseMethodName +.+ (lexem LBRACE) +.+ parseCallParams +.+ 
                     <<< (\(name, (_, (callParams, _))) -> (MethodCall Nothing name callParams)))
                 ||| (((parseExpr +.+ (lexem DOT) +.+ parseMethodName +.+ (lexem LBRACE) 
                        +.+ parseCallParams +.+ (lexem RBRACE)))
-                            <<< (\(expr, (_, (mname, (_, (callParams, _))))) 
-                                    -> (MethodCall (Just expr) mname callParams)))
+                            <<< (\(expr, (_, (mthName, (_, (callParams, _))))) 
+                                    -> (MethodCall (Just expr) mthName callParams)))
 
 
 parseCallParams :: Parser Token [Expr]
