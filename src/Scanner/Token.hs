@@ -55,8 +55,8 @@ data Token
      | IF                       -- if
      | WHILE                    -- while 
      | ELSE                     -- else
-     | CASE                     -- case (not to implement)
-     | BREAK                    -- break (not to implement)
+     | CASE                     -- case     (not to implement)
+     | BREAK                    -- break    (not to implement)
      | CONTINUE                 -- continue (not to implement)
      | FOR                      -- for
 
@@ -80,12 +80,12 @@ data Token
 
      | INSTANCEOF               -- instanceof(Type)
 
-     | INCREMENT                -- ++
-     | DECREMENT                -- --
+     | INCREMENT                -- ++ (not to Implement)
+     | DECREMENT                -- -- (not to implement)
 
      | AND                      -- &&
      | OR                       -- ||
-     | XOR                      -- ^
+     | XOR                      -- ^ (not to implement)
 
      | BOOLLITERAL Bool         -- true | false
      | CHARLITERAL Char         -- '..'
