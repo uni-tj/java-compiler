@@ -1,8 +1,17 @@
 
-module Parser.Parser(parser) where
+module Parser.Parser(parser, parseExpr) where
 
 import Types.Core
-import Types.AST 
+import Types.AST
+    ( Position(..),
+      Program,
+      Class(..),
+      Field(..),
+      Method(..),
+      Stmt(..),
+      Expr(..),
+      StmtOrExpr(..),
+      Literal(..) ) 
 import Parser.Combinators
 import Scanner.Token
 import Scanner.Lexer
@@ -199,7 +208,30 @@ data RightSideExpr  = RSbExpr BinOperator Expr --binop:Expr
                     | RSfaExpr String 
                     | RSmc String [Expr]
 
-resolveRightSideExpr :: Expr -> RightSideExpr -> Expr 
+binopCompare :: BinOperator -> BinOperator -> Bool 
+binopCompare op1 op2 = mapBinopPrecedence op1 < mapBinopPrecedence op2
+
+
+mapBinopPrecedence :: BinOperator -> Int 
+mapBinopPrecedence Mul = 1 
+mapBinopPrecedence Div = 1 
+mapBinopPrecedence Mod = 1 
+mapBinopPrecedence Add = 2
+mapBinopPrecedence Sub = 2
+mapBinopPrecedence Types.Core.LT = 3
+mapBinopPrecedence LTE = 3
+mapBinopPrecedence Types.Core.GT = 3
+mapBinopPrecedence GTE = 3
+mapBinopPrecedence Types.Core.EQ = 4
+mapBinopPrecedence NEQ = 4
+mapBinopPrecedence LAnd = 5 
+mapBinopPrecedence LOr = 6
+
+--deconstruction of the right side of an expression (with correct operator presedence)
+resolveRightSideExpr :: Expr -> RightSideExpr -> Expr
+resolveRightSideExpr expr (RSbExpr lop (Binary pos rop ls rs)) | (binopCompare lop rop) = (Binary dummyPos rop (Binary pos lop expr ls) rs)
+                                                               | otherwise = (Binary dummyPos lop expr (Binary pos rop ls rs))
+
 resolveRightSideExpr expr (RSbExpr binop rexpr) = Binary dummyPos binop expr rexpr
 resolveRightSideExpr expr (RSfaExpr fname) = FieldAccess dummyPos expr fname
 resolveRightSideExpr expr (RSmc mname callParams) = StmtOrExprAsExpr dummyPos (MethodCall (Just expr) mname callParams)
@@ -254,8 +286,6 @@ parseStmtOrExprEasy = ((parseMethodName +.+ (lexem LBRACE) +.+ parseCallParams +
 parseUnOp :: Parser Token UnOparator -- still typo
 parseUnOp =     ((lexem PLUS) <<< (\_ -> Plus))
             ||| ((lexem MINUS) <<< (\_ -> Minus))
-            ||| ((lexem INCREMENT) <<< (\_ -> PreIncrement))
-            ||| ((lexem DECREMENT) <<< (\_ -> PreDecrement))
             ||| ((lexem EXCLMARK) <<< (\_ -> LNot))
 
 parseBinOp :: Parser Token BinOperator
