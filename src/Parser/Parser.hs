@@ -61,7 +61,7 @@ parseClass =    ((parseVisibility +.+ (lexem CLASS) +.+ parseClassName +.+ (lexe
 
 --functions to parse class methods and class fields
 
-data ClassEntry = ClassMethod Method | ClassField Field deriving Show
+data ClassEntry = ClassMethod Method | ClassField Field
 
 getFields :: [ClassEntry] -> [Field]
 getFields [] = [] 
@@ -178,8 +178,8 @@ parseStmtOrExpr =     parseAssignment
 --left of dot only name as expression allowed
 parseAssignment :: Parser Token StmtOrExpr 
 parseAssignment =     (((parseLocalName +.+ (lexem ASSIGN) +.+ parseExpr)) <<< (\(varName, (_, (expr))) -> (Assign Nothing varName expr)))
-                  ||| (((parseLocalOrFieldOrClassName +.+ (lexem DOT) +.+ parseFieldName +.+ (lexem ASSIGN) +.+ parseExpr))
-                        <<< (\(lfcname, (_, (fn, (_, (expr2))))) -> (Assign (Just (Name dummyPos lfcname)) fn expr2)))
+                  ||| (((parseExpr +.+ (lexem DOT) +.+ parseFieldName +.+ (lexem ASSIGN) +.+ parseExpr))
+                        <<< (\(expr, (_, (fn, (_, (expr2))))) -> (Assign (Just expr) fn expr2)))
 
 parseNew :: Parser Token StmtOrExpr
 parseNew = ((lexem NEW) +.+ parseClassName +.+ (lexem LBRACE) +.+ parseCallParams +.+ (lexem RBRACE))
@@ -204,14 +204,17 @@ parseCallParams =     succeed []
 {-- # Expression --------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-data RightSideExpr  = RSbExpr BinOperator Expr --binop:Expr
-                    | RSfaExpr String 
-                    | RSmc String [Expr]
+-- temporary type to parse the right side of an expression (where left rec would occur)
+data RightSideExpr  = RSbExpr BinOperator Expr -- Right Side binary expression
+                    | RSfaExpr String          -- Right Side field access
+                    | RSmc String [Expr]       -- Right Side method call 
+                    | RSassign String Expr     -- Right Side Assign
 
+-- evals to true, if first opeartor binds more than second one
 binopCompare :: BinOperator -> BinOperator -> Bool 
 binopCompare op1 op2 = mapBinopPrecedence op1 < mapBinopPrecedence op2
 
-
+-- a smaller value means the operator binds stronger
 mapBinopPrecedence :: BinOperator -> Int 
 mapBinopPrecedence Mul = 1 
 mapBinopPrecedence Div = 1 
@@ -233,8 +236,9 @@ resolveRightSideExpr expr (RSbExpr lop (Binary pos rop ls rs)) | (binopCompare l
                                                                | otherwise = (Binary dummyPos lop expr (Binary pos rop ls rs))
 
 resolveRightSideExpr expr (RSbExpr binop rexpr) = Binary dummyPos binop expr rexpr
-resolveRightSideExpr expr (RSfaExpr fname) = FieldAccess dummyPos expr fname
-resolveRightSideExpr expr (RSmc mname callParams) = StmtOrExprAsExpr dummyPos (MethodCall (Just expr) mname callParams)
+resolveRightSideExpr expr (RSfaExpr fldName) = FieldAccess dummyPos expr fldName
+resolveRightSideExpr expr (RSmc mthName callParams) = StmtOrExprAsExpr dummyPos (MethodCall (Just expr) mthName callParams)
+resolveRightSideExpr expr (RSassign fldName rexpr) = StmtOrExprAsExpr dummyPos (Assign (Just expr) fldName rexpr)
 
 parseTExpr :: Parser Token Expr
 parseTExpr =    parseThis 
@@ -251,9 +255,10 @@ parseExpr =     ((parseTExpr +.+ parseExpr') <<< (\(texpr, rsexpr) -> (resolveRi
 
 parseExpr' :: Parser Token RightSideExpr
 parseExpr' =     (((parseBinOp +.+ parseExpr) <<< \(binop, rexpr) -> (RSbExpr binop rexpr)))
-             ||| (((lexem DOT) +.+ parseFieldName) <<< \(_, fname) -> (RSfaExpr fname))
-             ||| (((lexem DOT) +.+ parseMethodName +.+ (lexem LBRACE) +.+ parseCallParams +.+ (lexem RBRACE))
-                    <<< (\(_, (mname, (_, (callParams, _)))) -> (RSmc mname callParams)))
+             ||| (((lexem DOT) +.+ parseFieldName) <<< \(_, fldName) -> (RSfaExpr fldName)) -- field Access
+             ||| (((lexem DOT) +.+ parseMethodName +.+ (lexem LBRACE) +.+ parseCallParams +.+ (lexem RBRACE)) -- method call
+                    <<< (\(_, (mthName, (_, (callParams, _)))) -> (RSmc mthName callParams)))
+             ||| (((lexem DOT) +.+ parseFieldName +.+ (lexem ASSIGN) +.+ parseExpr) <<< \(_, (fldName, (_, (expr)))) -> (RSassign fldName expr))
 
 parseThis :: Parser Token Expr 
 parseThis = (lexem THIS) <<< (\_ -> (This dummyPos))
@@ -264,9 +269,6 @@ parseSuper = (lexem SUPER) <<< (\_ -> (Super dummyPos))
 parseName :: Parser Token Expr
 parseName =  parseLocalName <<< (\ln -> (Name dummyPos ln))
 
-parseFieldAccess :: Parser Token Expr
-parseFieldAccess = ((parseExpr +.+ (lexem DOT) +.+ parseFieldName))
-                        <<< (\(expr, (_, fn)) -> (FieldAccess dummyPos expr fn))
 parseUnary :: Parser Token Expr 
 parseUnary = (parseUnOp +.+ parseExpr) <<< (\(op, expr) -> (Unary dummyPos op expr))
 
@@ -278,10 +280,10 @@ parseBraceExpr :: Parser Token Expr
 parseBraceExpr = ((lexem LBRACE) +.+ parseExpr +.+ (lexem RBRACE)) <<< \(_, (expr, _)) -> expr 
 
 parseStmtOrExprEasy :: Parser Token Expr 
-parseStmtOrExprEasy = ((parseMethodName +.+ (lexem LBRACE) +.+ parseCallParams +.+ (lexem RBRACE))
+parseStmtOrExprEasy = ((parseMethodName +.+ (lexem LBRACE) +.+ parseCallParams +.+ (lexem RBRACE)) -- parse method call without expression
                         <<< (\(mname,(_, (callParams,_))) -> StmtOrExprAsExpr dummyPos (MethodCall Nothing mname callParams)))
-                    ||| (parseNew <<< \new -> (StmtOrExprAsExpr dummyPos new))
-                    ||| (parseAssignment <<< \asgnmnt -> (StmtOrExprAsExpr dummyPos asgnmnt))
+                    ||| (parseNew <<< \new -> (StmtOrExprAsExpr dummyPos new)) -- parse 'new' expression
+                    ||| (parseAssignment <<< \asgnmnt -> (StmtOrExprAsExpr dummyPos asgnmnt)) -- parseAssignmeht
 
 parseUnOp :: Parser Token UnOparator -- still typo
 parseUnOp =     ((lexem PLUS) <<< (\_ -> Plus))
