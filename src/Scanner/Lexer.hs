@@ -149,6 +149,7 @@ filterTokens :: [Token] -> [Token]
 filterTokens = filter (/= NEWLINE)
 
 tokenLength :: Token -> Int
+tokenLength (WRONGTOKEN msg length) = length
 tokenLength (IDENTIFIER str) = length str
 tokenLength (INTLITERAL x) | x == 0    = 1  -- Handle the special case for 0
                            | otherwise = floor (logBase 10 (fromIntegral (abs x))) + 1
@@ -207,5 +208,5 @@ validateTokens ((INTLITERAL x) : tkns) = if isValidInt x then INTLITERAL x : val
    error (show x ++ " is out of range for int")
 validateTokens ((STRINGLITERAL str) : _) =
    error ("strings not supported yet :" ++ str)
-
+validateTokens ((WRONGTOKEN msg _) : tkns) = error msg
 validateTokens (tkn : tkns) = tkn : validateTokens tkns
