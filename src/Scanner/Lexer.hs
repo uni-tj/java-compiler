@@ -86,7 +86,7 @@ lexNum :: String -> [Token]
 lexNum cs = INTLITERAL (read num) : lexer rest
       where (num,rest) = span isDigit cs
 
--- this will lead to an error while scanning
+-- this will lead to an error after while scanning
 lexStr :: String -> [Token]
 lexStr cs = STRINGLITERAL (read str) : lexer rest
        where (str,rest) = span ('"' /=) cs
@@ -194,7 +194,7 @@ filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
 filterIndexedTokens =
    filter (\posTkn -> token posTkn /= NEWLINE && token posTkn /= SPACE)
 
--- validation 
+-- final validation before carrying on with parsing
 
 isValidInt :: Integer -> Bool
 isValidInt num = (num <= 2147483647) && (num >= -2147483648)
