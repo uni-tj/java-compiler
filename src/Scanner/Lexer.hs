@@ -3,9 +3,6 @@ module Scanner.Lexer (lexWithIndex, lexWithoutIndex) where
 import Scanner.Token
 import Types.AST -- for Position type
 import Data.Char
-import GHC.Float (floorDouble)
-import GHC.Integer (integerToInt)
-import Extra (intToFloat)
 
 
 lexWithIndex :: String -> [PositionedToken]
@@ -148,11 +145,10 @@ lexInLineComment (_ : xs) = lexInLineComment xs
 filterTokens :: [Token] -> [Token]
 filterTokens = filter (/= NEWLINE)
 
-tokenLength :: Token -> Int
-tokenLength (WRONGTOKEN msg length) = length
-tokenLength (IDENTIFIER str) = length str
-tokenLength (INTLITERAL x) | x == 0    = 1  -- Handle the special case for 0
-                           | otherwise = floor (logBase 10 (fromIntegral (abs x))) + 1
+tokenLength :: Token -> Integer
+tokenLength (WRONGTOKEN _ len) = toInteger len
+tokenLength (IDENTIFIER str) = toInteger (length str)
+tokenLength (INTLITERAL x) = toInteger (length (show x))
 tokenLength PUBLIC = 6 
 tokenLength PROTECTED = 9 
 tokenLength PRIVATE = 7
@@ -170,13 +166,14 @@ tokenLength IF = 2
 tokenLength WHILE = 5
 tokenLength ELSE = 4
 tokenLength FOR = 3
-tokenLength RETURN = 5
+tokenLength RETURN = 6
 tokenLength EQUAL = 2
 tokenLength NOTEQUAL = 2
 tokenLength AND = 2
 tokenLength OR = 2
 tokenLength (BOOLLITERAL tr) = if tr then 4 else 5
-tokenLength (CHARLITERAL chr) = 1 -- except for escape characters
+tokenLength (CHARLITERAL ch) | isSpace ch = 2 --in case of escape characters '\n', '\t', ...
+                             | otherwise = 1  --standard character
 tokenLength JNULL = 4 
 tokenLength _ = 1
 
@@ -184,13 +181,13 @@ tokenLength _ = 1
 -- indexing Tokens based on occurences of NEWLINE token (will be removed)
 indexTokens :: [Token] -> [PositionedToken]
 indexTokens [] = []
-indexTokens list = indexTokensRec 0 0 list where
+indexTokens list = indexTokensRec 1 1 list where
     indexTokensRec _ _ [] = []
-    indexTokensRec _ vpos (NEWLINE : tkns) = indexTokensRec 0 (vpos + 1) tkns
+    indexTokensRec _ vpos (NEWLINE : tkns) = indexTokensRec 1 (vpos + 1) tkns
     indexTokensRec hpos vpos (SPACE : tkns) = indexTokensRec (hpos + 1) vpos tkns
-    indexTokensRec hpos vpos (tkn : tkns) =
-      PositionedToken { position = Position {start = (hpos, vpos), end = (hpos, vpos)},
-         token = tkn } : indexTokensRec (hpos + toInteger (tokenLength tkn)) vpos tkns
+    indexTokensRec hpos vpos (tkn : tkns) = 
+      PositionedToken { position = Position {start = (hpos, vpos), end = (hpos + (tokenLength tkn), vpos)},
+         token = tkn } : indexTokensRec (hpos + (tokenLength tkn)) vpos tkns
 
 -- should be redundant, because indexTokens already filters all NEWLINE's
 filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
@@ -208,5 +205,5 @@ validateTokens ((INTLITERAL x) : tkns) = if isValidInt x then INTLITERAL x : val
    error (show x ++ " is out of range for int")
 validateTokens ((STRINGLITERAL str) : _) =
    error ("strings not supported yet :" ++ str)
-validateTokens ((WRONGTOKEN msg _) : tkns) = error msg
+validateTokens ((WRONGTOKEN msg _) : _) = error msg
 validateTokens (tkn : tkns) = tkn : validateTokens tkns
