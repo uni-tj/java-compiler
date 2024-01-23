@@ -1,17 +1,24 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TupleSections  #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use mapAndUnzipM" #-}
-module SemanticCheck.Typecheck(checkProgram) where
+module SemanticCheck.Typecheck(typecheck) where
 
-import           Control.Monad.Except (Except, MonadError (throwError),
-                                       runExcept)
-import           Control.Monad.Extra  (forM_, when, whenJust)
+import           Control.Composition  ((.*))
+import           Control.Monad.Except (Except, MonadError (throwError), join,
+                                       runExcept, void)
+import           Control.Monad.Extra  (filterM, forM_, when, whenJust)
 import           Data.Foldable        (foldlM)
-import           Data.List            (find, intersperse, nub, tails, uncons)
+import           Data.Function.Apply  ((--$))
+import           Data.Function.Syntax (slipl)
+import           Data.List            (find, intercalate, intersperse, nub,
+                                       tails, uncons)
 import           Data.List.NonEmpty   (unzip)
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
-import           Data.Maybe           (fromJust, fromMaybe, isJust, mapMaybe)
+import           Data.Maybe           (fromJust, fromMaybe, isJust, isNothing,
+                                       mapMaybe)
+import           Data.Monoid.Extra    (First (First, getFirst))
 import           Data.Tuple.Extra     (swap)
 import           Prelude              hiding (EQ, GT, LT, unzip)
 import qualified Types.AST            as AST
@@ -23,9 +30,8 @@ import qualified Types.TAST           as TAST
 hasNoDuplicates :: Eq a => [a] -> Bool
 hasNoDuplicates xs = length xs == length (nub xs)
 
-infixr 8 -.
-(-.) :: (a -> b) -> (b -> c) -> a -> c
-(-.) = flip (.)
+(<<>) :: Maybe a -> Maybe a -> Maybe a
+m1 <<> m2 = getFirst $ First m1 <> First m2
 {- General helper functions -}
 
 type Excepting = Except String
@@ -49,6 +55,12 @@ instance Typed TAST.Expr where
   typee (TAST.Literal _type _)          = _type
   typee (TAST.StmtOrExprAsExpr _type _) = _type
 
+showSignature :: Identifier -> [Type] -> String
+showSignature name tparams = name ++ "(" ++ intercalate ", " (show <$> tparams) ++ ")"
+
+tparams :: AST.Method -> [Type]
+tparams = fmap fst . AST.mparams
+
 -- type ThisCtx = Excepting String
 -- type StaticCtx = Bool
 -- type Ctx = (ThisCtx, StaticCtx)
@@ -57,13 +69,27 @@ addLocal :: Type -> Identifier -> ExprCtx -> ExprCtx
 addLocal tvar name Ctx{locals,cIass,static,cIasses} = Ctx{locals=locals', cIass, static, cIasses}
   where locals' = Map.insert name tvar locals
 
+typecheck :: AST.Program -> TAST.Program
+typecheck prg = case runExcept $ typecheckM prg of
+  Left err   -> error err
+  Right prg' -> prg'
+
+typecheckM :: AST.Program -> Excepting TAST.Program
+typecheckM prg = precheckProgram prg >> checkProgram prg
+
 {- TODO: add missing constructors -}
+precheckProgram :: [AST.Class] -> Excepting ()
+precheckProgram cIasses = do
+  liftBool "Classes must have unique names." $
+    hasNoDuplicates $ AST.cname <$> cIasses
+  forM_ cIasses (precheckClass cIasses)
+
 checkProgram :: [AST.Class] -> Excepting TAST.Program
 checkProgram classes = do
-  liftBool "Classes must have unique names." $
-    hasNoDuplicates $ AST.cname <$> classes
   mapM (checkClass classes) classes
 
+precheckClass :: [AST.Class] -> AST.Class -> Excepting ()
+precheckClass = precheckExtends
 checkClass :: [AST.Class] -> AST.Class -> Excepting TAST.Class
 checkClass cIasses cIass@AST.Class{AST.caccess, AST.cname, AST.cfields, AST.cmethods} = do
   liftBool ("Accessibility of top level class " ++ cname ++ " must be public or package.") $
@@ -97,13 +123,21 @@ checkField cIasses cIass AST.Field { AST.faccess, AST.fstatic, AST.ftype, AST.fn
   }
 
 checkMethod :: [AST.Class] -> AST.Class -> AST.Method -> Excepting TAST.Method
-checkMethod cIasses cIass method@AST.Method{ AST.maccess, AST.mstatic, AST.mtype, AST.mname, AST.mparams, AST.mbody } = do
+checkMethod cIasses cIass method@AST.Method{ AST.moverride, AST.maccess, AST.mstatic, AST.mtype, AST.mname, AST.mparams, AST.mbody } = do
   when (mname == AST.cname cIass) $ checkConstructor cIasses cIass method
   liftBool ("Parameters must have unique names in method " ++ AST.cname cIass ++ "." ++ mname ++ ".") $
     hasNoDuplicates $ snd <$> mparams
   (mbody', defReturn) <- checkStmt Ctx{locals,cIass,static=mstatic,cIasses} mtype mbody
   liftBool ("Not all paths return a value in method " ++ AST.cname cIass ++ "." ++ mname ++ ".") $
     mtype == Void || defReturn
+  moverridden <- findOverridden cIasses method (AST.cextends cIass)
+  liftBool ("Method " ++ AST.cname cIass ++ "." ++ AST.mname method ++ " is not overriding any method.")
+    $ moverride && isNothing moverridden
+  whenJust moverridden $ \(overCIass, overridden) -> do
+    liftBool ("The return type of method " ++ AST.cname cIass ++ "." ++ AST.mname method ++ "  must be a subtype of the overridden method " ++ AST.cname overCIass ++ "." ++ AST.mname overridden ++ ".")
+      $ (AST.mtype method <: AST.mtype overridden) dummyCtx
+    liftBool ("The access modifier of method " ++ AST.cname cIass ++ "." ++ AST.mname method ++ "  must not be stricter than the overridden method " ++ AST.cname overCIass ++ "." ++ AST.mname overridden ++ ".")
+      $ AST.maccess method <= AST.maccess overridden
   return TAST.Method {
     TAST.maccess,
     TAST.mstatic,
@@ -113,7 +147,18 @@ checkMethod cIasses cIass method@AST.Method{ AST.maccess, AST.mstatic, AST.mtype
     TAST.mbody = mbody'
   }
   where locals = Map.fromList $ swap <$> mparams
-
+        dummyCtx = Ctx { cIasses, cIass, static = False, locals = Map.empty }
+        -- Search for overridden method in superclasses
+        findOverridden :: [AST.Class] -> AST.Method -> Maybe Identifier -> Excepting (Maybe (AST.Class, AST.Method))
+        findOverridden _   _       Nothing = return Nothing
+        findOverridden cIasses method (Just cIassName) = do
+          cIass <- _resolveClass cIasses cIassName
+          let moverridden = flip find (AST.cmethods cIass)$ \m ->
+                AST.mname m == AST.mname method
+                && tparams m == tparams method
+                && AST.maccess m < Private -- private methods are just not visible
+          recursive <- findOverridden cIasses method (AST.cextends cIass)
+          return $ ((cIass,) <$> moverridden) <<> recursive
 
 checkConstructor :: [AST.Class] -> AST.Class -> AST.Method -> Excepting ()
 checkConstructor _ _ AST.Method{ AST.mtype, AST.mname, AST.mbody } = do
@@ -135,7 +180,7 @@ checkStmt _   _      (AST.Block _ []) =
 checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ tvar name minit:stmts)) = do
   minit' <- mapM (checkExpr ctx) minit
   liftBool ("Expected initializer " ++ show (fromJust minit) ++ " to have declared type " ++ show tvar) $
-    maybe True (typee -. (<: tvar)) minit'
+    slipl maybe minit' True $ ($ ctx) . (<: tvar) . typee
   (block', defReturns) <- checkStmt (addLocal tvar name ctx) target $ AST.Block blockPos stmts
    -- This is safe, as AST.Block is used as input
   let (TAST.Block stmts') = block'
@@ -151,8 +196,8 @@ checkStmt ctx target (AST.Block blockPos (stmt:stmts)) = do
 checkStmt ctx target (AST.Return pos mexpr) = do
   mexpr' <- mapM (checkExpr ctx) mexpr
   case mexpr' of
-    Nothing -> liftBool ("Missing return value at " ++ show pos) $ Void <: target
-    Just expr' -> liftBool ("Expected " ++ show expr' ++ " to match return type " ++ show target ++ ".") $ typee expr' <: target
+    Nothing -> liftBool ("Missing return value at " ++ show pos) $ (Void <: target) ctx
+    Just expr' -> liftBool ("Expected " ++ show expr' ++ " to match return type " ++ show target ++ ".") $ (typee expr' <: target) ctx
   return (TAST.Return mexpr', True)
 checkStmt ctx target (AST.While _ cond body) = do
   cond' <- checkExpr ctx cond
@@ -202,7 +247,7 @@ checkExpr ctx (AST.FieldAccess _ expr name) = do
 checkExpr ctx (AST.Unary _ op expr) = do
   expr' <- checkExpr ctx expr
   tresult <- liftMaybe ("Operator " ++ show op ++ " is not defined on type " ++ show (typee expr') ++ ".") $
-    fmap snd $ flip find types $ \((op', tin),_) -> op' == op && typee expr' <: tin
+    fmap snd $ flip find types $ \((op', tin),_) -> op' == op && (typee expr' <: tin) ctx
   return $ TAST.Unary tresult op expr'
     where types =
             [ ((Plus        , Int ), Int )
@@ -213,7 +258,7 @@ checkExpr ctx (AST.Binary _ op expr1 expr2) = do
   expr1' <- checkExpr ctx expr1
   expr2' <- checkExpr ctx expr2
   tresult <- liftMaybe ("Operator " ++ show op ++ " is not defined on type " ++ show (typee expr1') ++ " x " ++ show (typee expr2') ++ ".") $
-    fmap snd $ flip find types $ \((op', tin1, tin2),_) -> op' == op && typee expr1' <: tin1 && typee expr2' <: tin2
+    fmap snd $ flip find types $ \((op', tin1, tin2),_) -> op' == op && (typee expr1' <: tin1) ctx && (typee expr2' <: tin2) ctx
   return $ TAST.Binary tresult op expr1' expr2'
     where types =
             [ ((Add, Int, Int), Int)
@@ -240,7 +285,7 @@ checkExpr _ (AST.Literal _ (AST.IntLit i)) = return $ TAST.Literal Int $ TAST.In
 checkExpr _ (AST.Literal _ (AST.CharLit c)) = return $ TAST.Literal Char $ TAST.CharLit c
 checkExpr _ (AST.Literal _ (AST.BoolLit b)) = return $ TAST.Literal Bool $ TAST.BoolLit b
 checkExpr _ (AST.Literal _ AST.Null) = return $ TAST.Literal NullType TAST.Null
-checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr _ (AST.Assign mleft name right)) = do
+checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr pos (AST.Assign mleft name right)) = do
   mleft' <- mapM (checkExpr ctx) mleft
   right' <- checkExpr ctx right
   tresult <- case (mleft', Map.lookup name locals, runExcept $ lookupField ctx name $ cIass ctx) of
@@ -253,13 +298,12 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr _ (AST.Assign mleft name right))
     (Nothing, Nothing, Left err      ) -> throwError err
     (Nothing, Nothing, Right (Just f)) -> fcheckStatic (static ctx) f >> return (AST.ftype f)
     (Nothing, Nothing, Right Nothing ) -> throwError $ "Name " ++ name ++ " not found."
-  liftBool (show right' ++ " is not assignable to type " ++ show tresult ++ ".") $
-    typee right' <: tresult
+  liftBool ("Type " ++ show (typee right') ++ " is not assignable to type " ++ show tresult ++ " at " ++ show pos ++ ".") $
+    typee right' <: tresult $ ctx
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.Assign mleft' name right'
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.New name args)) = do
   args' <- mapM (checkExpr ctx) args
-  constructor <- resolveMethod ctx args' name =<< resolveClass ctx name
-  checkArgs args' $ AST.mparams constructor
+  constructor <- resolveConstructor ctx name (typee <$> args')
   let tresult = Instance name
   let tparams = fst <$> AST.mparams constructor
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.New name (zip tparams args')
@@ -270,9 +314,8 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
       else TAST.This (Instance cIassName)
   args' <- mapM (checkExpr ctx) args
   (tstatic, tname) <- unpackClassType expr'
-  method <- resolveMethod ctx args' name =<< resolveClass ctx tname
+  (methodCIass, method) <- resolveMethod ctx tname name (typee <$> args')
   mcheckStatic tstatic method
-  checkArgs args' $ AST.mparams method
   let tresult = AST.mtype method
   let tparams = fst <$> AST.mparams method
   return $ TAST.StmtOrExprAsExpr tresult $ TAST.MethodCall expr' name (zip tparams args')
@@ -281,32 +324,54 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr name args)) = do
 {- typecheck helper functions
 -}
 -- doesn't need monad, because all classes are public/package and therefore accessible
+_lookupClass :: [AST.Class] -> Identifier -> Maybe AST.Class
+_lookupClass cIasses name = find ((name ==) . AST.cname) cIasses
+_resolveClass :: [AST.Class] -> Identifier -> Excepting AST.Class
+_resolveClass cIasses name = liftMaybe ("Class " ++ name ++ " does not exist.") $ _lookupClass cIasses name
 lookupClass :: ExprCtx -> Identifier -> Maybe AST.Class
-lookupClass ctx name = find ((name ==) . AST.cname) $ cIasses ctx
+lookupClass ctx = _lookupClass (cIasses ctx)
 resolveClass :: ExprCtx -> Identifier -> Excepting AST.Class
-resolveClass ctx name = liftMaybe ("Class " ++ name ++ " does not exist.") $ lookupClass ctx name
+resolveClass ctx = _resolveClass (cIasses ctx)
 
-lookupMethod :: ExprCtx -> [TAST.Expr] -> Identifier -> AST.Class -> Excepting (Maybe AST.Method)
-lookupMethod Ctx{cIass=cIassCtx} args' name cIass = do
-  -- let mmethod = find ((name ==) . AST.mname) $ AST.cmethods cIass
-  mmethod <- foldlM chooseOverload Nothing $ filter ((name ==) . AST.mname) $ AST.cmethods cIass
-  whenJust mmethod $ \method ->
-    liftBool ("Access of method " ++ name ++ " is not permitted from class " ++ AST.cname cIassCtx ++ ".")
-    $ AST.cname cIassCtx == AST.cname cIass || AST.maccess method <= Package
-  return mmethod
-  where chooseOverload :: Maybe AST.Method -> AST.Method -> Excepting (Maybe AST.Method)
-        chooseOverload mm1 m2 = case (mm1, m2 `isApplicableTo` args') of
-          (Nothing, False) -> return Nothing
-          (Nothing, True ) -> return $ Just m2
-          (Just m1, False) -> return $ Just m1
-          (Just m1, True )
-            -- Equal parameter types fall in the first case. They are illegal though and throw an error when the corresponding class is checked
-            | tparams m1 <~: tparams m2 -> return $ Just m1
-            | tparams m2 <~: tparams m1 -> return $ Just m2
-            | otherwise                 -> throwError $ "Reference to " ++ AST.mname m1 ++ " is ambiguous"
-        tparams = map fst . AST.mparams
-resolveMethod :: ExprCtx -> [TAST.Expr] -> Identifier -> AST.Class -> Excepting AST.Method
-resolveMethod ctx args' name cIass = liftMaybe ("Method " ++ AST.cname cIass ++ " does in exist on class " ++ name ++ ".") =<< lookupMethod ctx args' name cIass
+
+lookupMethod :: ExprCtx -> Identifier -> Identifier -> [Type] -> Excepting (Maybe (Identifier, AST.Method))
+lookupMethod ctx cIassName name targs = do
+  cIass <- resolveClass ctx cIassName
+  minheritedMethod <- fmap join $ mapM (\cN -> lookupMethod ctx cN name targs) $ AST.cextends cIass
+  foldlM (chooseMostSpecific ctx cIassName) minheritedMethod
+    =<< filterM (misAccessible ctx cIass)
+    (   filter (($ ctx) . (`isApplicableTo` targs))
+    $   filter (mhasName name)
+    $   filter (not . mhasName cIassName) -- exclude construcors
+    $   AST.cmethods cIass)
+resolveMethod :: ExprCtx -> Identifier -> Identifier -> [Type] -> Excepting (Identifier, AST.Method)
+resolveMethod ctx cIassName name targs =
+  liftMaybe ("No method " ++ showSignature name targs ++ " found on class " ++ cIassName ++ ".")
+  =<< lookupMethod ctx cIassName name targs
+
+lookupConstructor :: ExprCtx -> Identifier -> [Type] -> Excepting (Maybe AST.Method)
+lookupConstructor ctx cIassName targs = do
+  cIass <- resolveClass ctx cIassName
+  mfound <- foldlM (chooseMostSpecific ctx cIassName) Nothing
+    =<< filterM (misAccessible ctx cIass)
+    (   filter (($ ctx) . (`isApplicableTo` targs))
+    $   filter (mhasName cIassName) -- only constructors
+    $   AST.cmethods cIass)
+  return $ snd <$> mfound
+resolveConstructor :: ExprCtx -> Identifier -> [Type] -> Excepting AST.Method
+resolveConstructor ctx cIassName targs =
+  liftMaybe ("No constructor " ++ showSignature cIassName targs ++ " found on class " ++ cIassName ++ ".")
+  =<< lookupConstructor ctx cIassName targs
+
+chooseMostSpecific :: ExprCtx -> Identifier -> Maybe (Identifier, AST.Method) -> AST.Method -> Excepting (Maybe (Identifier, AST.Method))
+chooseMostSpecific ctx cIassName mcNm1 m2 = case mcNm1 of
+  Nothing       -> return $ Just (cIassName, m2)
+  Just (cN1,m1)
+    | tparams m1 ==   tparams m2 -> return $ Just (cIassName, m2) -- equal parameters => m2 is an override => choose m2
+    | tparams m1 <~:* tparams m2 -> return $ Just (cN1, m1)
+    | tparams m2 <~:* tparams m1 -> return $ Just (cIassName, m2)
+    | otherwise                  -> throwError $ "Reference to " ++ AST.mname m1 ++ " is ambiguous"
+  where (<~:*) = (<~:) --$ ctx
 
 lookupField :: ExprCtx -> Identifier -> AST.Class -> Excepting (Maybe AST.Field)
 lookupField Ctx{cIass=cIassCtx} name cIass = do
@@ -327,13 +392,14 @@ fcheckStatic static AST.Field{AST.fstatic, AST.fname}
   | static && not fstatic = throwError $ "Cannot use non-static method " ++ fname ++ " in a static context."
   | otherwise             = return ()
 
-checkArgs :: [TAST.Expr] -> [(Type, Identifier)] -> Excepting ()
-checkArgs args' params = do
-  liftBool ("Expected " ++ show (length params) ++ " arguments, but got " ++ show (length args') ++ ".") $
-    length params == length args'
-  sequence_ $ flip fmap (zip args' params) $ \(arg', (tparam,paramName)) ->
-    liftBool ("Expected argument " ++ show arg' ++ " of parameter " ++ paramName ++ " to have type " ++ show tparam ++ ".")
-    $ typee arg' <: tparam
+mhasName :: Identifier -> AST.Method -> Bool
+mhasName n = (n ==) . AST.mname
+
+misAccessible :: ExprCtx -> AST.Class -> AST.Method -> Excepting Bool
+misAccessible _   _      AST.Method{ AST.maccess=Private   } = return False
+misAccessible ctx called AST.Method{ AST.maccess=Protected } =  (AST.cname called `elem`) <$> anchestorsM cIasses calling
+  where Ctx{ cIasses, cIass=calling } = ctx
+misAccessible _   _      AST.Method{ AST.maccess=_         } = return True
 
 checkDuplicateMethod :: AST.Method -> AST.Method -> Excepting ()
 checkDuplicateMethod m1 m2 = if AST.mname m1 /= AST.mname m2 then return () else do
@@ -343,23 +409,43 @@ checkDuplicateMethod m1 m2 = if AST.mname m1 /= AST.mname m2 then return () else
 {- type related functions
 -}
 
+anchestorsM :: [AST.Class] -> AST.Class -> Excepting [Identifier]
+anchestorsM cIasses cIass = anchestors' (AST.cextends cIass) []
+  where anchestors' :: Maybe Identifier -> [Identifier] -> Excepting [Identifier]
+        anchestors' Nothing found = return $ reverse found
+        anchestors' (Just superName) found = do
+          when (superName `elem` found) $
+            throwError $ "Detected inheritance cycle: " ++ show found ++ "."
+          super <- _resolveClass cIasses superName
+          anchestors' (AST.cextends super) (AST.cname super : found)
+-- -- Only safe after running running anchestorsM once, e.g. through precheckExtends
+-- anchestors :: [AST.Class] -> AST.Class -> [Identifier]
+-- anchestors cs c = case runExcept $ anchestorsM cs c of
+--   Right res -> res
+--   Left _  -> error "anchestorsM failed, this indicates an internal error, as it should have been monadically run before!"
+
+precheckExtends :: [AST.Class] -> AST.Class -> Excepting ()
+precheckExtends = void .* anchestorsM
+
 unpackClassType :: TAST.Expr -> Excepting (Bool, Identifier)
 unpackClassType expr' = case typee expr' of
   (Instance       name) -> return (False, name)
   (Class name) -> return (True , name)
   _                  -> throwError $ "Expected " ++ show expr' ++ "to have class type."
 
-isApplicableTo :: AST.Method -> [TAST.Expr] -> Bool
-AST.Method{AST.mparams} `isApplicableTo` args'
-  =  length mparams == length args'
-  && and (zipWith (<:) targs tparams)
+isApplicableTo :: AST.Method -> [Type] -> ExprCtx -> Bool
+isApplicableTo AST.Method{AST.mparams} targs ctx
+  =  length mparams == length targs
+  && and (zipWith ((<:) --$ ctx) targs tparams)
   where tparams = fst <$> mparams
-        targs   = typee <$> args'
 
 -- Return whether parameter types of one method are a specialization of another
-(<~:) :: [Type] -> [Type] -> Bool
-tparams1 <~: tparams2 = and $ zipWith (<:) tparams1 tparams2
+(<~:) :: [Type] -> [Type] -> ExprCtx -> Bool
+(<~:) tparams1 tparams2 ctx = and $ zipWith ((<:) --$ ctx) tparams1 tparams2
 
-(<:) :: Type -> Type -> Bool
-(Instance _) <: (Instance "Object") = True
-t1        <: t2                     = t1 == t2
+(<:) :: Type -> Type -> ExprCtx -> Bool
+(<:) (Instance _) (Instance "Object") _ = True
+(<:) (Instance c1) (Instance c2) ctx = case runExcept $ anchestorsM (cIasses ctx) =<< resolveClass ctx c1 of
+  Left err -> error $ "Checking (<:) failed. This is an internal error, since classes used as Type should already be checked! The Exception was: " ++ err
+  Right anchestors -> c2 `elem` anchestors
+(<:) t1 t2 _ = t1 == t2
