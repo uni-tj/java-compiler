@@ -15,7 +15,7 @@ succeed value toks = [(value, toks)]        -- leeren Worts (\epsilon)
 
 -- conditional recognition
 satisfy :: (tok -> Bool) -> Parser tok tok
-satisfy cond [] = []
+satisfy _ [] = []
 satisfy cond (tok : toks) | cond tok  = succeed tok toks
                           | otherwise = failure toks
 
@@ -25,12 +25,25 @@ lexem tok = satisfy (== tok)
 
 -- recognition of Lexems with contructor parameters
 lexemParam :: Token -> Parser Token Token
-lexemParam tok = satisfy (equivalent tok) where 
+lexemParam tok = satisfy (equivalent tok) where
             equivalent (IDENTIFIER _) (IDENTIFIER _) = True
-            equivalent (INTLITERAL _) (INTLITERAL _) = True 
-            equivalent (BOOLLITERAL _) (BOOLLITERAL _) = True 
-            equivalent (CHARLITERAL _) (CHARLITERAL _) = True 
-            equivalent tok1 tok2 = (tok1 == tok2)
+            equivalent (INTLITERAL _) (INTLITERAL _) = True
+            equivalent (BOOLLITERAL _) (BOOLLITERAL _) = True
+            equivalent (CHARLITERAL _) (CHARLITERAL _) = True
+            equivalent tok1 tok2 = tok1 == tok2
+
+--the same functions, just for recognition of tokens, wrapped with their Position
+posLexem :: Token -> Parser PositionedToken PositionedToken
+posLexem tkn = satisfy (\posTkn -> token posTkn == tkn)
+
+posLexemParam :: Token -> Parser PositionedToken PositionedToken
+posLexemParam tkn = satisfy (equivalent tkn . token) where
+            equivalent (IDENTIFIER _) (IDENTIFIER _) = True
+            equivalent (INTLITERAL _) (INTLITERAL _) = True
+            equivalent (BOOLLITERAL _) (BOOLLITERAL _) = True
+            equivalent (CHARLITERAL _) (CHARLITERAL _) = True
+            equivalent tok1 tok2 = tok1 == tok2
+
 
 -- sequential recognition
 (+.+) :: Parser tok a -> Parser tok b -> Parser tok (a,b)
@@ -48,7 +61,7 @@ infixr +.+, |||
 -- parse one or n-many times the thing, p parses, and concat to list
 
 many :: Parser tok a -> Parser tok [a]
-many parser = (parser <<< \res -> [res]) ||| ((parser +.+ (many parser)) <<< (\(res, reslts) -> (res : reslts))) ||| succeed []
+many parser = (parser <<< (: [])) ||| ((parser +.+ many parser) <<< uncurry (:)) ||| succeed []
 
 {-
 --error handling
