@@ -6,7 +6,7 @@ type Parser toks a = [toks] -> [(a, [toks])]
 
 
 failure :: Parser a b                       -- Parser der leeren Sprache
-failure = \_ -> []
+failure _ = []
 
 
 succeed :: a -> Parser tok a                -- Parser der Sprache des 
@@ -16,12 +16,12 @@ succeed value toks = [(value, toks)]        -- leeren Worts (\epsilon)
 -- conditional recognition
 satisfy :: (tok -> Bool) -> Parser tok tok
 satisfy _ [] = []
-satisfy cond (tok : toks) | cond tok  = succeed tok toks
-                          | otherwise = failure toks
+satisfy cond (tkn : tkns) | cond tkn  = succeed tkn tkns
+                          | otherwise = failure tkns
 
 -- recognition of a lexem (terminal)
-lexem :: Eq tok => tok -> Parser tok tok
-lexem tok = satisfy (== tok)
+lexem :: Token -> Parser Token Token
+lexem tkn = satisfy (== tkn)
 
 -- recognition of Lexems with contructor parameters
 lexemParam :: Token -> Parser Token Token
@@ -30,7 +30,7 @@ lexemParam tok = satisfy (equivalent tok) where
             equivalent (INTLITERAL _) (INTLITERAL _) = True
             equivalent (BOOLLITERAL _) (BOOLLITERAL _) = True
             equivalent (CHARLITERAL _) (CHARLITERAL _) = True
-            equivalent tok1 tok2 = tok1 == tok2
+            equivalent tkn1 tkn2 = tkn1 == tkn2
 
 --the same functions, just for recognition of tokens, wrapped with their Position
 posLexem :: Token -> Parser PositionedToken PositionedToken
@@ -58,22 +58,8 @@ posLexemParam tkn = satisfy (equivalent tkn . token) where
 
 infixr +.+, |||
 
--- parse one or n-many times the thing, p parses, and concat to list
-
+-- parse zero or n-many times the thing, p parses, and concat to list
 many :: Parser tok a -> Parser tok [a]
-many parser = (parser <<< (: [])) ||| ((parser +.+ many parser) <<< uncurry (:)) ||| succeed []
-
-{-
---error handling
-parseWithError :: Parser tok a -> String -> Parser tok a
-parseWithError parser msg = \toks -> 
-    let 
-        result = parser toks 
-    in 
-        subParser result 
-
-    where 
-        subParser ((parseOutput, []) : rest) = (parseOutput, []) : rest
-        subParser ((parseOutput, restTokens) : rest) = error msg
-
--}
+many parser =     (parser <<< (: [])) 
+              ||| ((parser +.+ many parser) <<< uncurry (:)) 
+              ||| succeed []
