@@ -1,13 +1,20 @@
 module Parser.Combinators where
 
 import Scanner.Token
+import GHC.Float (showSignedFloat)
 
 type Parser toks a = [toks] -> [(a, [toks])]
 
+data ParseError = UnknownError
+                | PError String
 
 failure :: Parser a b                       -- Parser der leeren Sprache
 failure _ = []
 
+failureWithError :: Parser PositionedToken (Either PositionedToken ParseError)
+failureWithError [] = [(Right UnknownError, [])]
+failureWithError (tkn : tkns) = [(Right (PError ("error on token: " ++ show (token tkn) ++ " at position: " ++ show (position tkn))),tkns)]
+ 
 
 succeed :: a -> Parser tok a                -- Parser der Sprache des 
 succeed value toks = [(value, toks)]        -- leeren Worts (\epsilon)
@@ -18,6 +25,12 @@ satisfy :: (tok -> Bool) -> Parser tok tok
 satisfy _ [] = []
 satisfy cond (tkn : tkns) | cond tkn  = succeed tkn tkns
                           | otherwise = failure tkns
+
+satisfyWithError :: (PositionedToken -> Bool) -> Parser PositionedToken (Either PositionedToken ParseError)
+satisfyWithError _[] = []
+satisfyWithError cond (tkn : tkns) | cond tkn = succeed (Left tkn) tkns 
+                                   | otherwise = failureWithError (tkn:tkns)
+
 
 -- recognition of a lexem (terminal)
 lexem :: Token -> Parser Token Token
@@ -60,6 +73,6 @@ infixr +.+, |||
 
 -- parse zero or n-many times the thing, p parses, and concat to list
 many :: Parser tok a -> Parser tok [a]
-many parser =     (parser <<< (: [])) 
-              ||| ((parser +.+ many parser) <<< uncurry (:)) 
+many parser =     (parser <<< (: []))
+              ||| ((parser +.+ many parser) <<< uncurry (:))
               ||| succeed []
