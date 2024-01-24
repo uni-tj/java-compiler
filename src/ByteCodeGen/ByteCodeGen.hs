@@ -144,16 +144,16 @@ localVarGenBody (StmtOrExprAsStmt _) = []
 codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
 
-codeGenStmt (Return mexpr, localVarArr) = do -- areturn / ireturn
+codeGenStmt (Return mexpr, localVarArr) = do
   case mexpr of
     Just expr -> do
       let (exprCode, t) = codeGenExpr (expr, localVarArr)
       case t of
-        Types.Core.Int -> exprCode ++ [172]
-        Types.Core.Bool -> exprCode ++ [172]
-        Types.Core.Char -> exprCode ++ [172]
-        Types.Core.Instance instanceName -> exprCode ++ [176]
-        Types.Core.Class className -> exprCode ++ [176]
+        Types.Core.Int -> exprCode ++ [172] -- ireturn
+        Types.Core.Bool -> exprCode ++ [172] -- ireturn
+        Types.Core.Char -> exprCode ++ [172] -- ireturn
+        Types.Core.Instance instanceName -> exprCode ++ [176] -- areturn Todo: Is this right?
+        Types.Core.Class className -> exprCode ++ [176] -- areturn Todo: Is this right?
         _ -> []
     Nothing -> []
 
@@ -171,18 +171,19 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
       case i of
         Just index ->
           case varType of
-            -- 196 -> wide 54 -> istore + numer of local var
             Types.Core.Int -> do
-              let (codeExpr, t) = codeGenExpr (expr, localVarArr)
-              codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+              codeExpr ++ [196, 54] ++ splitLenInTwoBytes index -- 196 -> wide 54 -> istore + numer of local var
             Types.Core.Bool -> do
               let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Char -> do
               let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
-            Types.Core.Instance instanceName -> [] -- Todo: 58 astore? a = new x?
-            _ -> []
+            Types.Core.Instance className -> do
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr)
+              codeExpr ++ [196, 58] ++ splitLenInTwoBytes index  -- Todo: 58 astore?
+            _ -> [] -- Todo: I cant assign a class to a var?
         Nothing -> []
     Nothing -> []
 
@@ -201,9 +202,9 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
 codeGenExpr :: (Expr, LocalVarArrType) -> ([Int], Type)
-codeGenExpr (This thisName, localVarArr) = ([42], Instance "This") -- Todo: I dont know if this is right
+codeGenExpr (This thisName, localVarArr) = ([42], Instance "This") -- Aload_0 -> This is 0 -- Todo: I dont know if this is right
 
-codeGenExpr (Super superName, localVarArr) = ([42], Instance "Super") -- Todo: I dont know if this is right
+codeGenExpr (Super superName, localVarArr) = ([], NullType) -- Todo: If we dont to inheritance than we dont need this
 
 codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
   let i = findIndex ((== localVarName) . fst) localVarArr
@@ -213,7 +214,7 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
         Types.Core.Int -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
         Types.Core.Bool -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
         Types.Core.Char -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int ) -- wide, iload
-        Types.Core.Instance instantName-> ([], Instance instantName) -- Todo: Search localOrFieldOrClassName in localVarArr
+        Types.Core.Instance instantName -> ([], Instance instantName) -- Todo: Search localOrFieldOrClassName in localVarArr
         -- Types.Core.Class className -> ([]) -- Todo: Push with aload ref from const pool from the class on stack
         _ -> ([], localVarType)
     Nothing -> ([], localVarType)
