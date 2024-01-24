@@ -11,7 +11,6 @@ lexWithIndex = filterIndexedTokens . indexTokens . validateTokens . lexer
 lexWithoutIndex :: String -> [Token]
 lexWithoutIndex = filterTokens . validateTokens . lexer
 
-
 lexer :: String -> [Token]
 lexer [] = []
 lexer ('\'':ch: '\'':cs) = CHARLITERAL ch : lexer cs
@@ -30,7 +29,6 @@ lexer (c:cs)
 lexer ('!':'=':cs) = NOTEQUAL : lexer cs
 lexer ('<':'=':cs) = LESSEQUAL : lexer cs
 lexer ('>':'=':cs) = GREATEREQUAL : lexer cs
-
 lexer ('=':'=':cs) = EQUAL : lexer cs
 lexer ('{':cs) = LBRACKET : lexer cs
 lexer ('}':cs) = RBRACKET : lexer cs
@@ -95,28 +93,28 @@ lexStr cs = STRINGLITERAL (read str) : lexer rest
 lexVar :: String -> [Token]
 lexVar cs =
    case span isAlphaNum cs of
-      ("true",rest) -> BOOLLITERAL True : lexer rest
-      ("false",rest) -> BOOLLITERAL False : lexer rest
-      ("public",rest) -> PUBLIC : lexer rest
-      ("protected",rest) -> PROTECTED : lexer rest
-      ("private",rest) -> PRIVATE : lexer rest
-      ("static",rest) -> STATIC : lexer rest
-      ("class",rest) -> CLASS : lexer rest
-      ("this",rest) -> THIS : lexer rest
-      ("super", rest) -> SUPER : lexer rest
-      ("new",rest) -> NEW : lexer rest
-      ("String",rest) -> STRING : lexer rest
-      ("char",rest) -> CHAR : lexer rest
-      ("void",rest) -> VOID : lexer rest
-      ("boolean",rest) -> BOOLEAN : lexer rest
-      ("int",rest) -> INT : lexer rest
-      ("if",rest) -> IF : lexer rest
-      ("while",rest) -> WHILE : lexer rest
-      ("else",rest) -> ELSE : lexer rest
-      ("return",rest) -> RETURN : lexer rest
-      ("null",rest) -> JNULL : lexer rest
-      ("extends", rest) -> EXTENDS : lexer rest
-      (var,rest)   -> IDENTIFIER var : lexer rest
+      ("true",rest)        -> BOOLLITERAL True : lexer rest
+      ("false",rest)       -> BOOLLITERAL False : lexer rest
+      ("public",rest)      -> PUBLIC : lexer rest
+      ("protected",rest)   -> PROTECTED : lexer rest
+      ("private",rest)     -> PRIVATE : lexer rest
+      ("static",rest)      -> STATIC : lexer rest
+      ("class",rest)       -> CLASS : lexer rest
+      ("this",rest)        -> THIS : lexer rest
+      ("super", rest)      -> SUPER : lexer rest
+      ("new",rest)         -> NEW : lexer rest
+      ("String",rest)      -> STRING : lexer rest
+      ("char",rest)        -> CHAR : lexer rest
+      ("void",rest)        -> VOID : lexer rest
+      ("boolean",rest)     -> BOOLEAN : lexer rest
+      ("int",rest)         -> INT : lexer rest
+      ("if",rest)          -> IF : lexer rest
+      ("while",rest)       -> WHILE : lexer rest
+      ("else",rest)        -> ELSE : lexer rest
+      ("return",rest)      -> RETURN : lexer rest
+      ("null",rest)        -> JNULL : lexer rest
+      ("extends", rest)    -> EXTENDS : lexer rest
+      (var,rest)           -> IDENTIFIER var : lexer rest
 
 -- unsupported tokens
    -- ("for", rest) -> FOR : lexer rest
@@ -146,36 +144,37 @@ filterTokens :: [Token] -> [Token]
 filterTokens = filter (/= NEWLINE)
 
 tokenLength :: Token -> Integer
-tokenLength (WRONGTOKEN _ len) = toInteger len
-tokenLength (IDENTIFIER str) = toInteger (length str)
-tokenLength (INTLITERAL x) = toInteger (length (show x))
-tokenLength PUBLIC = 6 
-tokenLength PROTECTED = 9 
-tokenLength PRIVATE = 7
-tokenLength STATIC = 6 
-tokenLength EXTENDS = 8
-tokenLength CLASS = 5
-tokenLength THIS = 4
-tokenLength SUPER = 5
-tokenLength NEW = 3
-tokenLength CHAR = 4
-tokenLength VOID = 4
-tokenLength BOOLEAN = 7
-tokenLength INT = 3
-tokenLength IF = 2
-tokenLength WHILE = 5
-tokenLength ELSE = 4
-tokenLength FOR = 3
-tokenLength RETURN = 6
-tokenLength EQUAL = 2
-tokenLength NOTEQUAL = 2
-tokenLength AND = 2
-tokenLength OR = 2
-tokenLength (BOOLLITERAL tr) = if tr then 4 else 5
 tokenLength (CHARLITERAL ch) | isSpace ch = 2 --in case of escape characters '\n', '\t', ...
                              | otherwise = 1  --standard character
-tokenLength JNULL = 4 
-tokenLength _ = 1
+tokenLength tkn = case tkn of
+         (WRONGTOKEN _ len)   -> toInteger len
+         (IDENTIFIER str)     -> toInteger (length str)
+         (INTLITERAL x)       -> toInteger (length (show x))
+         PUBLIC               -> 6
+         PROTECTED            -> 9
+         PRIVATE              -> 7
+         STATIC               -> 6
+         EXTENDS              -> 8
+         CLASS                -> 5
+         THIS                 -> 4
+         SUPER                -> 5
+         NEW                  -> 3
+         CHAR                 -> 4
+         VOID                 -> 4
+         BOOLEAN              -> 7
+         INT                  -> 3
+         IF                   -> 2
+         WHILE                -> 5
+         ELSE                 -> 4
+         FOR                  -> 3
+         RETURN               -> 6
+         EQUAL                -> 2
+         NOTEQUAL             -> 2
+         AND                  -> 2
+         OR                   -> 2
+         (BOOLLITERAL tr)     -> if tr then 4 else 5
+         JNULL                -> 4
+         _                    -> 1
 
 
 -- indexing Tokens based on occurences of NEWLINE token (will be removed)
@@ -185,9 +184,9 @@ indexTokens list = indexTokensRec 1 1 list where
     indexTokensRec _ _ [] = []
     indexTokensRec _ vpos (NEWLINE : tkns) = indexTokensRec 1 (vpos + 1) tkns
     indexTokensRec hpos vpos (SPACE : tkns) = indexTokensRec (hpos + 1) vpos tkns
-    indexTokensRec hpos vpos (tkn : tkns) = 
-      PositionedToken { position = Position {start = (hpos, vpos), end = (hpos + (tokenLength tkn), vpos)},
-         token = tkn } : indexTokensRec (hpos + (tokenLength tkn)) vpos tkns
+    indexTokensRec hpos vpos (tkn : tkns) =
+      PositionedToken { position = Position {start = (hpos, vpos), end = (hpos + tokenLength tkn, vpos)},
+         token = tkn } : indexTokensRec (hpos + tokenLength tkn) vpos tkns
 
 -- should be redundant, because indexTokens already filters all NEWLINE's
 filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
