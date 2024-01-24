@@ -165,6 +165,11 @@ parseStmt =     parseReturn
             ||| parseIf
             ||| parseStmtOrExprAsStmt
 
+{-
+parseSingletonStmt :: Parser PositionedToken Stmt
+parseSingletonStmt =     parseLocalVarDecl
+                     ||| (parseStmtOrExpr <<< \(soe,pos) -> StmtOrExprAsStmt pos soe)
+-}
 
 parseStmts :: Parser PositionedToken [Stmt]
 parseStmts = many parseStmt
@@ -184,7 +189,15 @@ parseWhile :: Parser PositionedToken Stmt
 parseWhile = (posLexem WHILE +.+ parseExpr +.+ parseStmt)
                 <<< (\(while, (expr, stmt))
                     -> While (spanPos (position while) (getPosFromStmt stmt)) expr stmt)
-
+{-
+parseForLoop :: Parser PositionedToken Stmt
+parseForLoop = (posLexem FOR +.+ posLexem LBRACE +.+ parseSingletonStmt +.+ posLexem SEMICOLON +.+ parseExpr
+                +.+ posLexem SEMICOLON +.+ parseSingletonStmt +.+ posLexem RBRACE +.+ parseStmt)
+                    <<< \(for, (_, (stmt1, (_, (bexpr, (_, (stmt3, (_, block))))))))
+                        ->  let pos = spanPos (position for) (getPosFromStmt block)
+                                blockPos = getPosFromStmt block in
+                                Block pos [stmt1, While pos bexpr (Block blockPos [block,stmt3])]
+-}
 
 -- note: parameter of (INTLITERAL __) is ignored
 parseLocalVarDecl :: Parser PositionedToken Stmt
@@ -257,7 +270,7 @@ data RightSideExpr  = RSbExpr BinOperator Expr -- Right Side binary expression
                     | RSfaExpr Position String          -- Right Side field access
                     | RSmc Position String [Expr]       -- Right Side method call 
                     | RSassign Position String Expr     -- Right Side Assign
-                    | Chain RightSideExpr RightSideExpr -- chain of field-accesses
+                    | Chain RightSideExpr RightSideExpr -- chain of field-accesses a.b.c....
 
 -- evals to true, if first opeartor binds more than second one
 binopCompare :: BinOperator -> BinOperator -> Bool
