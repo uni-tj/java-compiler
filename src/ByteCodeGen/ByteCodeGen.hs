@@ -22,8 +22,10 @@ codeGen = do
 
 createClassFile :: Class -> [Method_Info]
 createClassFile classInfo = do
+  let cName = getNameFromClass classInfo
+
   let methods = getMethodsFromClass classInfo
-  let methodObjects = map createMethodObject methods
+  let methodObjects = map (\method -> createMethodObject (cName, method)) methods
 
   methodObjects
 
@@ -87,12 +89,16 @@ createClassFile classInfo = do
 
   -- print "End"
 
-createMethodObject:: Method -> Method_Info
-createMethodObject (Method methodAccess mtype methodStatic mname methodParams methodBody) = do
+createMethodObject:: (String, Method) -> Method_Info
+createMethodObject (cName, Method methodAccess mtype methodStatic mName methodParams methodBody) = do
   let accessFlags = getAccessFlagsForMethod (methodAccess, methodStatic)
   let indexMethodName = 0 -- Todo: Query CP
   let indexDescr = 0 -- Todo: Query CP
-  let attributeCode = createAttributeCode (methodStatic, methodParams, methodBody)
+  let methodConstructor = cName == mName
+  
+
+  let attributeCode = createAttributeCode (methodConstructor, methodStatic, methodParams, methodBody)
+  
 
   Method_Info {
     af_mi = AccessFlags accessFlags,
@@ -105,12 +111,15 @@ createMethodObject (Method methodAccess mtype methodStatic mname methodParams me
       ]
   }
 
-createAttributeCode :: (Bool, [(Type, LocalName)], Stmt) -> Attribute_Info
-createAttributeCode (methodStatic, params, body) = do
-  let indexNameAttr = 0 -- Query CP for Code
+createAttributeCode :: (Bool, Bool, [(Type, LocalName)], Stmt) -> Attribute_Info
+createAttributeCode (methodConstructor, methodStatic, params, body) = do
+  let indexNameAttr = 333 -- Query CP for Code
 
   let localVarArr = localVarGen (methodStatic, params, body)
   let methodCode = codeGenStmt (body, localVarArr)
+
+  -- Todo: Query CP for MethodRef_Info -> java/lang/Object ... -> Is this always this case?
+  let constructorCode = if methodConstructor then [42, 183,333,333] else [] 
 
   AttributeCode {
     index_name_attr = indexNameAttr, -- Code
@@ -118,7 +127,7 @@ createAttributeCode (methodStatic, params, body) = do
     len_stack_attr = 0, -- Todo: Calc max stack
     len_local_attr = length params + if methodStatic then 0 else 1,
     tam_code_attr = length methodCode,
-    array_code_attr = methodCode,
+    array_code_attr = constructorCode ++ methodCode,
     tam_ex_attr = 0,
     array_ex_attr = [],
     tam_atrr_attr = 0,
@@ -180,7 +189,7 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
         Just index ->
           case varType of
             Types.Core.Int -> do
-              let (codeExpr, t) = codeGenExpr (expr, localVarArr) 
+              let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index -- 196 -> wide 54 -> istore + numer of local var
             Types.Core.Bool -> do
               let (codeExpr, t) = codeGenExpr (expr, localVarArr)
@@ -222,8 +231,8 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
         Types.Core.Int -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
         Types.Core.Bool -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
         Types.Core.Char -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int ) -- wide, iload
-        Types.Core.Instance instantName -> ([], Instance instantName) -- Todo: Search localOrFieldOrClassName in localVarArr
-        -- Types.Core.Class className -> ([]) -- Todo: Push with aload ref from const pool from the class on stack
+        Types.Core.Instance instantName -> ([196, 25] ++ splitLenInTwoBytes index, Instance instantName) -- Todo: Is this oke?
+        -- Types.Core.Class className -> Not possible to store Class in var? Todo: Is this oke?
         _ -> ([], localVarType)
     Nothing -> ([], localVarType)
 
@@ -234,7 +243,7 @@ codeGenExpr (ClassRef cType cName, localVarArr) = do
 codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = do
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
   let getFieldCode = 180 : [333, 333] -- Todo: Query constant pool
-  
+
   (exprCode ++ getFieldCode, fieldTyp)
 
 codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do -- for actions with only one input var like not or ++
@@ -251,7 +260,6 @@ codeGenExpr (Binary typeBinary binOperator expr0 expr1, localVarArr) = do
 -- Todo - only load const from pool and dont push numbers ?
 codeGenExpr (Literal literalType literal, localVarArr) = do
   case literalType of
-    -- 54 -> istore + numer of local var
     Types.Core.Int -> (17 : codeGenLiteral literal, literalType) -- 17 sipush -> 2 Byte
     Types.Core.Bool -> (codeGenLiteral literal, literalType)
     Types.Core.Char -> (codeGenLiteral literal, literalType)
@@ -265,7 +273,7 @@ codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
         case mExpr of
           Just justExpr -> codeGenExpr (justExpr, localVarArr)
           Nothing -> ([], NullType)
-  
+
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
 
   if length mExprCode > 0 then
@@ -286,17 +294,26 @@ codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
         in exprCode ++ codeStore ++ splitLenInTwoBytes index
       Nothing -> []
 
-codeGenStmtOrExpr (New className exprs, localVarArr) = [] -- Todo: Need const pool
+codeGenStmtOrExpr (New className exprs, localVarArr) = do
+  -- 89 = Dup -- Todo: Query CP for Class_Info/MethodRef_Info -> Call constructor
+  let newCode = [187, 333, 333] ++ [89] ++ [183, 333, 333] 
+  let paraCode = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) exprs
+  
+  paraCode ++ newCode
 
-codeGenStmtOrExpr (MethodCall expr methodName paras, localVarArr) = do -- Todo: Need const pool   
-  let (codeExpr, t) = codeGenExpr (expr, localVarArr)
-  let methodIdCp = 0 -- Query cp
+codeGenStmtOrExpr (MethodCall expr methodName paras, localVarArr) = do
+  -- Todo: What if static methode of own class is called?
+  let (codeExpr, tCodeExpr) = codeGenExpr (expr, localVarArr)
+  
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
 
-  -- Todo: Decide which of this to use based on what?
-  -- invokespecial 183 -- invokestatic 184 -- invokevirtual 182
-  let codeInvoke = [0]
-
+  -- Todo: invokespecial 183 -- invokestatic 184 -- invokevirtual 182
+  let codeInvoke = case tCodeExpr of
+        Types.Core.Instance instanceName -> [182, 333, 333] -- Todo: Query CP for MethodRef_Info
+        Types.Core.Class className -> [184, 333, 333] -- Todo: Query CP for MethodRef_Info
+        -- Todo: What to do with invokespecial 183?
+        _ -> []
+  
   codeExpr ++ codeParas ++ codeInvoke
 
 codeGenBinOperator:: BinOperator -> [Int]
@@ -333,6 +350,9 @@ splitLenInTwoBytes len = [highByte, lowByte]
 
 getMethodsFromClass :: Types.TAST.Class -> [Method]
 getMethodsFromClass = cmethods
+
+getNameFromClass :: Types.TAST.Class -> String
+getNameFromClass = cname
 
 getAccessFromClass :: Types.TAST.Class -> AccessModifier
 getAccessFromClass = caccess
