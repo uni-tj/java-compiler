@@ -229,7 +229,11 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
 
 codeGenExpr (ClassRef cType cName, localVarArr) = ([0], cType)
 
-codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = ([0], fieldTyp) -- expr for this or class or what ever "class a a.j"
+codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = do
+  let (exprCode, t) = codeGenExpr (expr, localVarArr)
+  let getFieldCode = 180 : [333, 333] -- Todo: Query constant pool
+  
+  (exprCode ++ getFieldCode, fieldTyp)
 
 codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do -- for actions with only one input var like not or ++
   let (codeExpr, t) = codeGenExpr (expr, localVarArr)

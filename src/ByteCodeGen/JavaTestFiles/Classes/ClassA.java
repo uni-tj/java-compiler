@@ -1,3 +1,5 @@
+package ByteCodeGen.JavaTestFiles.Classes;
+
 public class ClassA {
     int c;
     

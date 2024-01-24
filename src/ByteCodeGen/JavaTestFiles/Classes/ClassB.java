@@ -1,3 +1,5 @@
+package ByteCodeGen.JavaTestFiles.Classes;
+
 public class ClassB {
     public static void main(String[] args) {
         // Using the static method from ClassA

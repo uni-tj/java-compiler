@@ -37,7 +37,14 @@ classes = [
                 mstatic = False,
                 mname = "nonStaticMethod",
                 mparams = [(Types.Core.Int, "a")],
-                mbody = Return (Just (Binary Types.Core.Int Mul (LocalVar Types.Core.Int "a") (FieldAccess Types.Core.Int (This (Instance "ClassA")) "c")))
+                mbody = Return (
+                    Just (
+                        Binary Types.Core.Int Mul 
+                        (LocalVar Types.Core.Int "a") 
+                        (FieldAccess Types.Core.Int (This (Instance "ClassA")) 
+                        "c")
+                    )
+                )
             }
         ]
     }, 
