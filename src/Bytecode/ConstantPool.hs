@@ -3,10 +3,14 @@ module Bytecode.ConstantPool where
 import Control.Monad.State
 import Data.Bool (Bool (True))
 import qualified Data.ByteString as BS
+import Data.ByteString.Char8 (strip)
 import Data.List
+import qualified Data.Text as Core
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Debug.Trace
 import Jvm.Data.ClassFormat as CF
+import qualified Jvm.Data.ClassFormat as TAST
 import Types.Core
 import Types.Core as Core
 import Types.TAST as TAST
@@ -95,7 +99,7 @@ methodDescriptor (Method _ mtype _ mname params _) =
   constructDescriptor mtype (map fst params)
 
 insertMethod :: Int -> TAST.Method -> ConstantPoolState Int
-insertMethod cIdx m@(Method _ _ _ mname _ _) = do
+insertMethod cIdx m@(Method _ _ _ mname _ mbody) = do
   -- Insert Method Signature and Name
   mnameIdx <- insertUtf8 mname
   sigStrIdx <- insertUtf8 (methodDescriptor m)
@@ -108,6 +112,7 @@ insertMethod cIdx m@(Method _ _ _ mname _ _) = do
           desc = ""
         }
   -- Insert the Methoderef with ref to the  current class
+  _ <- traverseStmt mbody
   insertEntry
     CF.MethodRef_Info
       { tag_cp = CF.TagMethodRef,
@@ -150,7 +155,7 @@ traverseStmt (TAST.If expr stmt1 maybeStmt) = do
   traverseExpr expr
   traverseStmt stmt1
   maybe (return ()) traverseStmt maybeStmt
-traverseStmt (TAST.StmtOrExprAsStmt stmtOrExpr) = traverseStmtOrExpr Nothing stmtOrExpr
+traverseStmt (TAST.StmtOrExprAsStmt stmtOrExpr) = trace "traverseStmtor Expr as stmt" $ traverseStmtOrExpr Nothing stmtOrExpr
 
 traverseExpr :: TAST.Expr -> ConstantPoolState ()
 traverseExpr (TAST.This _) = return () -- TODO How to resolve this
@@ -168,14 +173,14 @@ traverseExpr (TAST.FieldAccess ftype expr fname) = do
 traverseExpr (TAST.Unary _ _ expr) = traverseExpr expr
 traverseExpr (TAST.Binary _ _ expr1 expr2) = traverseExpr expr1 >> traverseExpr expr2
 traverseExpr (TAST.Literal _ lit) = do
-  lit_idx <- traverseLit lit
+  lit_idx <- trace ("Debug: traversingLit") $ traverseLit lit
   return ()
 traverseExpr (TAST.StmtOrExprAsExpr t stmtOrExpr) = traverseStmtOrExpr (Just t) stmtOrExpr
 
 traverseStmtOrExpr :: Maybe Type -> TAST.StmtOrExpr -> ConstantPoolState ()
 traverseStmtOrExpr _ (TAST.Assign maybeExpr name expr) = do
+  trace "Debug Traverse Assign" $ traverseExpr expr
   maybe (return ()) traverseExpr maybeExpr -- TODO Need to be checked
-  traverseExpr expr
 traverseStmtOrExpr _ (TAST.New className exprs) = do
   insertClassInfo className
   mapM_ traverseExpr exprs
@@ -246,10 +251,75 @@ traverseLit (TAST.CharLit c) = insertInt (fromIntegral $ fromEnum c)
 traverseLit (TAST.BoolLit b) = insertInt (if b then 1 else 0)
 traverseLit TAST.Null = error "Null can not be pushed on the constant Pool"
 
+{-
+  Searching in Constant Pool
+  -}
+isMatchingUtf8 :: String -> CF.CP_Info -> Bool
+isMatchingUtf8 str (Utf8_Info _ _ str1 _) = str == str1
+isMatchingUtf8 _ _ = False
+
+findEntry :: (CF.CP_Info -> Bool) -> ConstantPoolState [Int]
+findEntry f = do
+  cp <- get
+  return $ map fst . filter (f . snd) $ cp
+
+findUtf8 :: String -> ConstantPoolState [Int]
+findUtf8 str = do
+  findEntry (isMatchingUtf8 str)
+
+isNameAndType :: Int -> Int -> CF.CP_Info -> Bool
+isNameAndType nIdx tIdx (CF.NameAndType_Info _ pnIdx ptIdx _) = pnIdx == nIdx && ptIdx == tIdx
+isNameAndType _ _ _ = False
+
+getResult :: String -> [a] -> a
+getResult msg [] = error msg
+getResult _ (x : _) = x
+
+isClass :: Int -> CF.CP_Info -> Bool
+isClass cnameIdx (CF.Class_Info _ pcIdx _) = pcIdx == cnameIdx
+isClass _ _ = False
+
+findClass :: String -> ConstantPoolState Int
+findClass str = do
+  cname <- findUtf8 str
+
+  cIdx <- findEntry (isClass (getResult "Could not Find Class with matching name" cname))
+  return
+    ( getResult
+        "Could not find Matching Class"
+        cIdx
+    )
+
+findMethodRef :: Int -> Int -> CF.CP_Info -> Bool
+findMethodRef cIdx ntIdx (CF.MethodRef_Info _ pcIdx pntIdx _) = cIdx == pcIdx && ntIdx == pntIdx
+findMethodRef _ _ _ = False
+
+findMethodCall :: Core.Type -> TAST.StmtOrExpr -> ConstantPoolState Int
+findMethodCall mRet m@(TAST.MethodCall maybeExpr mname args) = do
+  let mdesc = constructDescriptor mRet (map fst args)
+  tIdx <- findUtf8 mdesc
+  nIdx <- findUtf8 mname
+  ntIdx <-
+    findEntry
+      ( isNameAndType
+          (getResult "Could not find Matching MethodName in the ConstantPool" nIdx)
+          (getResult "Could not find Matching Descriptor in the ConstantPool" tIdx)
+      )
+
+  cIdx <- case maybeExpr of
+    Just expr -> case typee expr of
+      Core.Instance cname -> findClass cname
+      Core.Class cname -> findClass cname
+      t -> error $ "Cannot make a Method Call on Primitive Type: " ++ show t
+    Nothing -> error "Method cannot be called without a class"
+  mref <- findEntry (findMethodRef (getResult "Could not find NameAndType in the ConstantPool" ntIdx) cIdx)
+  return $ getResult "Could not find MethodRef in the ConstantPool" mref
+findMethodCall _ _ = error "It is not possible to find a Method entry for non method entries"
+
 buildConstantPool :: TAST.Class -> ConstantPoolState ConstantPool
 buildConstantPool c@(TAST.Class _ cname _ cfields cmethods) = do
   put []
-  codeIdx <- insertUtf8 "Code"
+  codeIdx <- trace "Test" $ insertUtf8 "Code"
   cIdx <- insertClass c
   mapM_ (insertField cIdx) cfields
   mapM_ (insertMethod cIdx) cmethods

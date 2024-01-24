@@ -53,7 +53,14 @@ simpleClassTAST =
         "SimpleClass"
         [(Core.Int, "initialNumber")]
         ( TAST.Block
-            [ TAST.StmtOrExprAsStmt (TAST.Assign Nothing "number" (TAST.Name Core.Int "initialNumber"))
+            [ TAST.StmtOrExprAsStmt
+                (TAST.Assign Nothing "number" (TAST.Name Core.Int "initialNumber")),
+              TAST.StmtOrExprAsStmt
+                ( TAST.Assign
+                    Nothing
+                    "number"
+                    (TAST.Literal Core.Int (TAST.IntLit (0 - 690000)))
+                )
             ]
         ),
       TAST.Method
