@@ -1,5 +1,3 @@
-XXX
-
 ClassFile {
     magic = Magic, 
     minver = MinorVersion {numMinVer = 0}, 

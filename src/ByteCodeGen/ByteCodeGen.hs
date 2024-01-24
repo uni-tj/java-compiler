@@ -7,14 +7,22 @@ import ByteCodeGen.Jvm.Data.ClassFormat
 import Types.TAST
 import Types.Core
 -- import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
-import ByteCodeGen.JavaTestFiles.GGT.GgtTAST (ggtErw)
+-- import ByteCodeGen.JavaTestFiles.GGT.GgtTAST (ggtErw)
+import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST (classes)
 
 import Data.List (findIndex)
 import Data.Bits
 
 codeGen :: [Method_Info]
 codeGen = do
-  let methods = getMethodsFromClass ggtErw
+  let methodObjects = concatMap createClassFile classes
+
+  methodObjects
+
+
+createClassFile :: Class -> [Method_Info]
+createClassFile classInfo = do
+  let methods = getMethodsFromClass classInfo
   let methodObjects = map createMethodObject methods
 
   methodObjects

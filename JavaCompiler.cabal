@@ -21,9 +21,7 @@ source-repository head
 library
   exposed-modules:
       ByteCodeGen.ByteCodeGen
-      ByteCodeGen.JavaTestFiles.Classes.ClassAClassfile
-      ByteCodeGen.JavaTestFiles.Classes.ClassATAST
-      ByteCodeGen.JavaTestFiles.Classes.ClassBClassfile
+      ByteCodeGen.JavaTestFiles.Classes.ClassesTAST
       ByteCodeGen.JavaTestFiles.GGT.GgtTAST
       ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST
       ByteCodeGen.Jvm.BinaryClass
