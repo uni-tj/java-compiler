@@ -73,6 +73,10 @@ correctSols = filter (\(_, resttokens) -> null resttokens)
 {-- # Program Definition -----------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
+-- an empty Program is also valid
+{- 
+    Program = e | Class : e
+-}
 
 parseProgram :: Parser PositionedToken Program
 parseProgram = many parseClass
@@ -80,6 +84,11 @@ parseProgram = many parseClass
 {-----------------------------------------------------------------------------}
 {-- # Class Definitions ------------------------------------------------------}
 {-----------------------------------------------------------------------------}
+
+{-
+    Class = Visibility : Static : 'class' : 'extends' : ClassName :  '{' : ClassBody : '}'
+          | Visibility : Static : 'class' : '{' : ClassBody : '}'
+-}
 
 --standard supertype: "Object" if not declared otherwise
 parseClass :: Parser PositionedToken Types.AST.Class
@@ -99,6 +108,11 @@ getFields = lefts
 getMethods :: [Either Field Method] -> [Method]
 getMethods = rights
 
+{-
+    ClassBody = e 
+              | FieldDeclaration : ClassBody 
+              | MthdDeclaration : ClassBody 
+-}
 parseClassBody :: Parser PositionedToken [Either Field Method]
 parseClassBody = many parseClassEntry
 
@@ -111,9 +125,16 @@ parseClassEntry =  (parseMethodDecl <<< Right)
 {-- # Methods ----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
+{-
+    Static = e | 'static'
+-}
 parseStatic :: Parser PositionedToken Bool -- rename to parseStatic
 parseStatic = (posLexem STATIC <<< const True) ||| succeed False
 
+{-
+    MthdDeclaration = Visibility : Static : Type : Name : '(' : MthdParams :  ')' : Block 
+                    | Visibility : Name : '(' : MthdParams : ')' : Block 
+-}
 parseMethodDecl :: Parser PositionedToken Method
 parseMethodDecl =     ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseMethodName +.+ posLexem LBRACE -- parsing regular method decl
                         +.+ parseMethodParams +.+ posLexem RBRACE +.+ parseBlock)
@@ -127,7 +148,9 @@ parseMethodDecl =     ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseM
                                 -> Method {maccess = vis, mtype = Instance name, mstatic = False, mname = name,
                                     mparams = params, mbody = block}))
 
-
+{-
+    MthdParams = e | Type : Name | Type : Name : ',' : MthdParams
+-}
 --parsing method parameters
 parseMethodParams :: Parser PositionedToken [(Type, LocalName)]
 parseMethodParams =     succeed []
@@ -143,6 +166,10 @@ parseMethodParams =     succeed []
 {-- # Fields -----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
+{-
+    FieldDeclaration = Visibility : Static : Type : Name : "=" : Expr : ';'
+                     | Visibliity : Static : Type : Name : ";"
+-}
 parseFieldDecl :: Parser PositionedToken Field
 parseFieldDecl =     ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseFieldName +.+ posLexem ASSIGN +.+ parseExpr +.+ posLexem SEMICOLON)
                         <<< (\(vis, (stc, (tpe, (name, (_, (expr, _))))))
