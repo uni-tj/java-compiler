@@ -47,16 +47,18 @@ data Stmt
   deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = Assign (Maybe Expr) LocalOrFieldName Expr
-  | New ClassName [Expr]
-  | MethodCall (Maybe Expr) MethodName [(Type, Expr)]
+  = LocalAssign LocalName Expr
+  | FieldAssign Expr ClassName FieldName Expr
+  | New ClassName [(Type, Expr)]
+  | MethodCall Expr ClassName MethodName [(Type, Expr)]
   deriving (Show, Eq, Ord)
 
 data Expr
   = This Type
   | Super Type
-  | Name Type LocalOrFieldOrClassName
-  | FieldAccess Type Expr FieldName
+  | LocalVar Type LocalName
+  | ClassRef Type ClassName
+  | FieldAccess Type Expr ClassName FieldName
   | Unary Type UnOparator Expr
   | Binary Type BinOperator Expr Expr
   | Literal Type Literal

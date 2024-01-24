@@ -163,12 +163,14 @@ traverseExpr (TAST.Super _) = return () -- TODO How to resolve super
 traverseExpr (TAST.Name _ name) = do
   _ <- insertClassInfo name -- TODO This needs to be a Classnam in a newer version
   return ()
-traverseExpr (TAST.FieldAccess ftype expr fname) = do
+traverseExpr (TAST.LocalVar ftype fname) = do
+  return ()
+traverseExpr (TAST.ClassRef ctype cname) = do
+  _ <- insertClassInfo cname
+  return ()
+traverseExpr (TAST.FieldAccess ftype cname expr fname) = do
   _ <- traverseExpr expr
-  case ftype of
-    (Core.Instance cname) -> insertClassInfo cname
-    (Core.Class cname) -> insertClassInfo cname
-    t -> error ("Cannot make an Field Access on Primitive Type:" ++ show t)
+  _ <- insertClassInfo cname
   return ()
 traverseExpr (TAST.Unary _ _ expr) = traverseExpr expr
 traverseExpr (TAST.Binary _ _ expr1 expr2) = traverseExpr expr1 >> traverseExpr expr2
@@ -178,7 +180,10 @@ traverseExpr (TAST.Literal _ lit) = do
 traverseExpr (TAST.StmtOrExprAsExpr t stmtOrExpr) = traverseStmtOrExpr (Just t) stmtOrExpr
 
 traverseStmtOrExpr :: Maybe Type -> TAST.StmtOrExpr -> ConstantPoolState ()
-traverseStmtOrExpr _ (TAST.Assign maybeExpr name expr) = do
+traverseStmtOrExpr _ (TAST.LocalAssign _ expr) = do
+  trace "Debug Traverse Assign" $ traverseExpr expr
+  maybe (return ()) traverseExpr maybeExpr -- TODO Need to be checked
+traverseStmtOrExpr _ (TAST.FieldAssign maybeExpr cname name expr) = do
   trace "Debug Traverse Assign" $ traverseExpr expr
   maybe (return ()) traverseExpr maybeExpr -- TODO Need to be checked
 traverseStmtOrExpr _ (TAST.New className exprs) = do
@@ -217,13 +222,8 @@ traverseStmtOrExpr _ (TAST.New className exprs) = do
 --
 -- mapM_ (traverseExpr . snd) args
 
-traverseStmtOrExpr (Just mreT) (TAST.MethodCall maybeExpr mname args) = do
-  cIdx <- case maybeExpr of
-    Just expr -> case typee expr of
-      Core.Instance cname -> insertClassInfo cname
-      Core.Class cname -> insertClassInfo cname
-      t -> error $ "Cannot make a Method Call on Primitive Type: " ++ show t
-    Nothing -> error "Method cannot be called without a class"
+traverseStmtOrExpr (Just mreT) (TAST.MethodCall expr cname mname args) = do
+  cIdx <- insertClassInfo cname
 
   nIdx <- insertUtf8 mname
   tIdx <- insertUtf8 (constructDescriptor mreT (map fst args))
