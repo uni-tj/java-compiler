@@ -227,7 +227,9 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
         _ -> ([], localVarType)
     Nothing -> ([], localVarType)
 
-codeGenExpr (ClassRef cType cName, localVarArr) = ([0], cType)
+codeGenExpr (ClassRef cType cName, localVarArr) = do
+  -- Todo: This is not generating any code?
+  ([], cType)
 
 codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = do
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
@@ -259,26 +261,30 @@ codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (c
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
-  -- Todo: What to do with mExprCode - is it a fieldAccess than?
   let (mExprCode, mT) =
         case mExpr of
           Just justExpr -> codeGenExpr (justExpr, localVarArr)
           Nothing -> ([], NullType)
-
+  
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
 
-  let i = findIndex ((== localOrFieldName) . fst) localVarArr
-  case i of
-    Just index ->
-      let codeStore = case t of
-            Types.Core.Int -> [196, 54]
-            Types.Core.Bool -> [196, 54]
-            Types.Core.Char -> [196, 54]
-            Types.Core.Instance instanceName -> [196, 58]
-            Types.Core.Class className -> [196, 58]
-            _ -> []
-      in exprCode ++ codeStore ++ splitLenInTwoBytes index
-    Nothing -> []
+  if length mExprCode > 0 then
+    -- putfield
+    mExprCode ++ exprCode ++ [181,333,333] -- Todo: Query CP of FieldRef_Info
+  else do
+    -- Non putfield
+    let i = findIndex ((== localOrFieldName) . fst) localVarArr
+    case i of
+      Just index ->
+        let codeStore = case t of
+              Types.Core.Int -> [196, 54]
+              Types.Core.Bool -> [196, 54]
+              Types.Core.Char -> [196, 54]
+              Types.Core.Instance instanceName -> [196, 58]
+              Types.Core.Class className -> [196, 58]
+              _ -> []
+        in exprCode ++ codeStore ++ splitLenInTwoBytes index
+      Nothing -> []
 
 codeGenStmtOrExpr (New className exprs, localVarArr) = [] -- Todo: Need const pool
 

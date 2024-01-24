@@ -18,7 +18,20 @@ classes = [
                 finit = Nothing
             }
         ], 
-        cmethods = [ 
+        cmethods = [
+            Method { 
+                maccess = Types.Core.Public, 
+                mtype = Types.Core.Int,
+                mstatic = False,
+                mname = "ClassA",
+                mparams = [], 
+                mbody = Block [
+                    StmtOrExprAsStmt (Assign 
+                    (Just (This (Instance "ClassA")))
+                    "c"
+                    (Literal Types.Core.Int (IntLit 10)))
+                ]
+            },  
             Method { 
                 maccess = Types.Core.Public, 
                 mtype = Types.Core.Int,
