@@ -164,6 +164,7 @@ parseStmt =     parseReturn
             ||| parseLocalVarDecl
             ||| parseIf
             ||| parseStmtOrExprAsStmt
+            ||| parseThisOrSuperCall
 
 {-
 parseSingletonStmt :: Parser PositionedToken Stmt
@@ -220,6 +221,13 @@ parseIf =     ((posLexem IF +.+ parseExpr +.+ parseStmt)
 
 parseStmtOrExprAsStmt :: Parser PositionedToken Stmt
 parseStmtOrExprAsStmt = (parseStmtOrExpr +.+ posLexem SEMICOLON) <<< (\((stOrEx, pos1), semicolon) -> StmtOrExprAsStmt (spanPos pos1 (position semicolon)) stOrEx)
+
+parseThisOrSuperCall :: Parser PositionedToken Stmt 
+parseThisOrSuperCall = ||| (parsePosLexem THIS +.+ parsePosLexem LBRACE +.+ parseCallParams +.+ parsePosLexem RBRACE) 
+                            <<< \(this, (_, (params, rb))) -> ThisCall pos
+                            
+                       ||| (parsePosLexem SUPER +.+ parsePosLexem LBRACE +.+ parseCallParams +.+ parsePosLexem RBRACE)
+                            <<< \(super, (_, (params, rb))) -> SuperCall 
 
 {-----------------------------------------------------------------------------}
 {-- # StmtOrExpr -------------------------------------------------------------}
