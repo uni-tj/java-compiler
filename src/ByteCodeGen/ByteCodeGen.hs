@@ -17,8 +17,14 @@ import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST (classes)
 
 -- Question
 -- 1. What to do with chars?
+-- Nur Print sonst Int
 -- 2. How to calc max stack?
--- 3. WAS DOKU
+-- Den Baum durchgehen -> Lieber zuviel
+-- 3. Doku
+-- Wie kann man den Code einzeln anschauen
+-- Tests schreiben und zeigen wie man Tests ausführen
+-- Was hat man sich gedacht bei z.B. max stack gedacht
+-- Pro Person ca. 1 Seite
 
 -- Todo:
 -- Query CP
