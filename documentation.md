@@ -11,7 +11,7 @@ Todos:
 
 - check variable redeclarations (in nested blocks)
 - add missing constructor
-- simplify lookupMethod call to only require class name
+- this and super calls, can only appear in constructors as first statement
 - position errors?
 
 Features:
