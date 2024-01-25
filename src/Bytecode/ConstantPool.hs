@@ -160,15 +160,12 @@ traverseStmt (TAST.StmtOrExprAsStmt stmtOrExpr) = trace "traverseStmtor Expr as 
 traverseExpr :: TAST.Expr -> ConstantPoolState ()
 traverseExpr (TAST.This _) = return () -- TODO How to resolve this
 traverseExpr (TAST.Super _) = return () -- TODO How to resolve super
-traverseExpr (TAST.Name _ name) = do
-  _ <- insertClassInfo name -- TODO This needs to be a Classnam in a newer version
-  return ()
 traverseExpr (TAST.LocalVar ftype fname) = do
   return ()
 traverseExpr (TAST.ClassRef ctype cname) = do
   _ <- insertClassInfo cname
   return ()
-traverseExpr (TAST.FieldAccess ftype cname expr fname) = do
+traverseExpr (TAST.FieldAccess ftype expr cname fname) = do
   _ <- traverseExpr expr
   _ <- insertClassInfo cname
   return ()
@@ -182,13 +179,14 @@ traverseExpr (TAST.StmtOrExprAsExpr t stmtOrExpr) = traverseStmtOrExpr (Just t) 
 traverseStmtOrExpr :: Maybe Type -> TAST.StmtOrExpr -> ConstantPoolState ()
 traverseStmtOrExpr _ (TAST.LocalAssign _ expr) = do
   trace "Debug Traverse Assign" $ traverseExpr expr
-  maybe (return ()) traverseExpr maybeExpr -- TODO Need to be checked
+  (return ()) -- TODO Need to be checked
 traverseStmtOrExpr _ (TAST.FieldAssign maybeExpr cname name expr) = do
   trace "Debug Traverse Assign" $ traverseExpr expr
-  maybe (return ()) traverseExpr maybeExpr -- TODO Need to be checked
+  traverseExpr maybeExpr -- TODO Need to be checked
+  (return ())
 traverseStmtOrExpr _ (TAST.New className exprs) = do
   insertClassInfo className
-  mapM_ traverseExpr exprs
+  mapM_ (traverseExpr . snd) exprs
 
 -- traverseStmtOrExpr (Just mreT) (TAST.MethodCall maybeExpr mname args) = do
 --  cIdx <- (case maybeExpr of
@@ -295,7 +293,7 @@ findMethodRef cIdx ntIdx (CF.MethodRef_Info _ pcIdx pntIdx _) = cIdx == pcIdx &&
 findMethodRef _ _ _ = False
 
 findMethodCall :: Core.Type -> TAST.StmtOrExpr -> ConstantPoolState Int
-findMethodCall mRet m@(TAST.MethodCall maybeExpr mname args) = do
+findMethodCall mRet m@(TAST.MethodCall maybeExpr cname mname args) = do
   let mdesc = constructDescriptor mRet (map fst args)
   tIdx <- findUtf8 mdesc
   nIdx <- findUtf8 mname
@@ -306,12 +304,7 @@ findMethodCall mRet m@(TAST.MethodCall maybeExpr mname args) = do
           (getResult "Could not find Matching Descriptor in the ConstantPool" tIdx)
       )
 
-  cIdx <- case maybeExpr of
-    Just expr -> case typee expr of
-      Core.Instance cname -> findClass cname
-      Core.Class cname -> findClass cname
-      t -> error $ "Cannot make a Method Call on Primitive Type: " ++ show t
-    Nothing -> error "Method cannot be called without a class"
+  cIdx <- findClass cname
   mref <- findEntry (findMethodRef (getResult "Could not find NameAndType in the ConstantPool" ntIdx) cIdx)
   return $ getResult "Could not find MethodRef in the ConstantPool" mref
 findMethodCall _ _ = error "It is not possible to find a Method entry for non method entries"
