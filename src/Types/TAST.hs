@@ -12,7 +12,7 @@ data Class = Class
   { caccess  :: AccessModifier
   , cname    :: ClassName
   -- not required
-  , cextends :: ClassName
+  , cextends :: Maybe ClassName
   , cfields  :: [Field]
   , cmethods :: [Method]
   }

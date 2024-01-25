@@ -153,7 +153,7 @@ checkProgram = do
   mapM checkClass =<< gets cIasses
 
 checkClass :: AST.Class -> ExceptState TAST.Class
-checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cfields, AST.cmethods} = do
+checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cextends, AST.cfields, AST.cmethods} = do
   liftBool ("Accessibility of top level class " ++ cname ++ " must be public or package.")
     $ caccess == Public || caccess == Package
   liftBool ("Fields must have unique names in class " ++ cname)
@@ -167,7 +167,7 @@ checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cfields, AST.cmethods} = 
   return TAST.Class {
     TAST.caccess,
     TAST.cname,
-    TAST.cextends = [],
+    TAST.cextends = cextends,
     TAST.cfields = cfields',
     TAST.cmethods = cmethods'
   }
