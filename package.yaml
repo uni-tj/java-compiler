@@ -14,6 +14,8 @@ dependencies:
   - mtl
   - containers
   - extra >= 1.7.13
+  - composition-prelude >= 3.0.0.0
+  - composition-extra >= 2.0.0
 
 ghc-options:
   - -Wall

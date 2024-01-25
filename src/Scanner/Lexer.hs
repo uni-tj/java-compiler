@@ -51,6 +51,7 @@ lexer ('>':cs) = GREATER : lexer cs
 lexer ('&':'&':cs) = AND : lexer cs
 lexer ('|' : '|' : cs) = OR : lexer cs
 lexer ('=':cs) = ASSIGN : lexer cs
+lexer ('@':'O':'v':'e':'r':'r':'i':'d':'e': cs) = OVERRIDE : lexer cs
 
 lexer (someChar : cs) = WRONGTOKEN ("token not supported :" ++ [someChar]) 1 : lexer cs
 
@@ -174,6 +175,7 @@ tokenLength tkn = case tkn of
          OR                   -> 2
          (BOOLLITERAL tr)     -> if tr then 4 else 5
          JNULL                -> 4
+         OVERRIDE             -> 8
          _                    -> 1
 
 

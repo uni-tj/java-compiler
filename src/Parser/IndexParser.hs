@@ -85,21 +85,21 @@ parseProgram = many parseClass
 {-- # Class Definitions ------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-{-
+{-  # class declaration, reduces to Types.AST.Class 
     Class = Visibility : Static : 'class' : 'extends' : ClassName :  '{' : ClassBody : '}'
           | Visibility : Static : 'class' : '{' : ClassBody : '}'
 -}
-
+--TODO: ensure constructors have the correct name
 --standard supertype: "Object" if not declared otherwise
 parseClass :: Parser PositionedToken Types.AST.Class
 parseClass =    ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem EXTENDS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET)
                 <<< (\(vis, (_, (name, (_ , (supName, (_, (cblock,_)))))))
-                    -> Types.AST.Class { caccess = vis, cname = fst name, cextends = fst supName,
+                    -> Types.AST.Class { caccess = vis, cname = fst name, cextends = Just (fst supName),
                                cfields = getFields cblock, cmethods = getMethods cblock}))
 
             ||| ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET )
                 <<< (\(vis, (_, (name, (_, (cblock,_)))))
-                    -> Types.AST.Class { caccess = vis, cname = fst name, cextends = "Object",
+                    -> Types.AST.Class { caccess = vis, cname = fst name, cextends = Nothing, --nothing indicating: extends Object
                                cfields = getFields cblock, cmethods = getMethods cblock}))
 
 getFields :: [Either Field Method] -> [Field]
@@ -125,28 +125,34 @@ parseClassEntry =  (parseMethodDecl <<< Right)
 {-- # Methods ----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-{-
+{- # static flag, reduces to bool, weather token is present or not
     Static = e | 'static'
 -}
 parseStatic :: Parser PositionedToken Bool -- rename to parseStatic
 parseStatic = (posLexem STATIC <<< const True) ||| succeed False
 
-{-
+{- # override annotation, recudes to bool, weather token is present or not
+    Override = e | '@Override'
+-}
+parseOverride :: Parser PositionedToken Bool 
+parseOverride = (posLexem OVERRIDE <<< const True) ||| succeed False
+
+{- # method declaration, reduces to Types.AST.Method
     MthdDeclaration = Visibility : Static : Type : Name : '(' : MthdParams :  ')' : Block 
                     | Visibility : Name : '(' : MthdParams : ')' : Block 
 -}
-parseMethodDecl :: Parser PositionedToken Method
-parseMethodDecl =     ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseMethodName +.+ posLexem LBRACE -- parsing regular method decl
+parseMethodDecl :: Parser PositionedToken Types.AST.Method
+parseMethodDecl =     ((parseOverride +.+ parseVisibility +.+ parseStatic +.+ parseType +.+ parseMethodName +.+ posLexem LBRACE -- parsing regular method decl
                         +.+ parseMethodParams +.+ posLexem RBRACE +.+ parseBlock)
-                            <<< (\(vis,(stc, ((retType, _),((name, _), (_, (params, (_, block)))))))
+                            <<< (\(ovrFlg, (vis,(stc, ((retType, _),((name, _), (_, (params, (_, block))))))))
                                 -> Method {maccess = vis, mtype = retType, mstatic = stc, mname = name,
-                                    mparams = params, mbody = block}))
+                                    mparams = params, mbody = block, moverride = ovrFlg}))
 
-                  ||| ((parseVisibility +.+ parseMethodName +.+ posLexem LBRACE +.+ parseMethodParams   -- parsing a constructor
+                  ||| ((parseOverride +.+ parseVisibility +.+ parseMethodName +.+ posLexem LBRACE +.+ parseMethodParams          -- parsing a constructor
                         +.+ posLexem RBRACE +.+ parseBlock)
-                            <<< (\(vis,((name, _), (_, (params, (_, block)))))
+                            <<< (\(ovrFlg, (vis,((name, _), (_, (params, (_, block))))))
                                 -> Method {maccess = vis, mtype = Instance name, mstatic = False, mname = name,
-                                    mparams = params, mbody = block}))
+                                    mparams = params, mbody = block, moverride = ovrFlg}))
 
 {-
     MthdParams = e | Type : Name | Type : Name : ',' : MthdParams
@@ -166,22 +172,26 @@ parseMethodParams =     succeed []
 {-- # Fields -----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-{-
+{- # field declaration, reduces to Types.AST.Field
     FieldDeclaration = Visibility : Static : Type : Name : "=" : Expr : ';'
                      | Visibliity : Static : Type : Name : ";"
 -}
-parseFieldDecl :: Parser PositionedToken Field
-parseFieldDecl =     ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseFieldName +.+ posLexem ASSIGN +.+ parseExpr +.+ posLexem SEMICOLON)
-                        <<< (\(vis, (stc, (tpe, (name, (_, (expr, _))))))
-                            -> Field {faccess = vis, ftype = fst tpe, fstatic = stc, fname = fst name, finit = Just expr}))
+parseFieldDecl :: Parser PositionedToken Types.AST.Field
+parseFieldDecl =     ((parseOverride +.+ parseVisibility +.+ parseStatic +.+ parseType +.+ parseFieldName +.+ posLexem ASSIGN +.+ parseExpr +.+ posLexem SEMICOLON)
+                        <<< (\(ovrFlg, (vis, (stc, (tpe, (name, (_, (expr, _)))))))
+                            -> Field {faccess = vis, ftype = fst tpe, fstatic = stc, fname = fst name, finit = Just expr, foverride = ovrFlg}))
 
-                 ||| ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseFieldName +.+ posLexem SEMICOLON)
-                        <<< (\(vis, (stc, (tpe, (name, _))))
-                            -> Field {faccess = vis, ftype = fst tpe, fstatic = stc, fname = fst name, finit = Nothing}))
+                 ||| ((parseOverride +.+ parseVisibility +.+ parseStatic +.+ parseType +.+ parseFieldName +.+ posLexem SEMICOLON)
+                        <<< (\(ovrFlg, (vis, (stc, (tpe, (name, _)))))
+                            -> Field {faccess = vis, ftype = fst tpe, fstatic = stc, fname = fst name, finit = Nothing, foverride = ovrFlg}))
 
 {-----------------------------------------------------------------------------}
 {-- # Statements -------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
+
+{-  
+    Statement = Return | Block | While | LocalVarDecl | If | StmtOrExpr
+-}
 
 parseStmt :: Parser PositionedToken Stmt
 parseStmt =     parseReturn
@@ -191,6 +201,8 @@ parseStmt =     parseReturn
             ||| parseLocalVarDecl
             ||| parseIf
             ||| parseStmtOrExprAsStmt
+ --         ||| parseThisOrSuperCall
+ --         ||| parseEmptyStmt
 
 {-
 parseSingletonStmt :: Parser PositionedToken Stmt
@@ -198,13 +210,23 @@ parseSingletonStmt =     parseLocalVarDecl
                      ||| (parseStmtOrExpr <<< \(soe,pos) -> StmtOrExprAsStmt pos soe)
 -}
 
+{-
+    Stmts = e | Stmt | Stmt : Stmts
+-}
 parseStmts :: Parser PositionedToken [Stmt]
 parseStmts = many parseStmt
 
+{-
+    Block = '{' : Stmts : '}' 
+          | '{' : '}' 
+-}
 parseBlock :: Parser PositionedToken Stmt
-parseBlock = (posLexem LBRACKET +.+ parseStmts +.+ posLexem RBRACKET)
-                <<< (\(lb, (stmts, rb)) -> Block (makePos lb rb) stmts)
+parseBlock =     (posLexem LBRACKET +.+ parseStmts +.+ posLexem RBRACKET) <<< (\(lb, (stmts, rb)) -> Block (makePos lb rb) stmts)
+             ||| (posLexem LBRACKET +.+ posLexem RBRACKET) <<< \(lb, rb) -> Block (makePos lb rb) []
 
+{-
+    Return = 'return' : ';' | 'return' : Expr : ';'
+-}
 parseReturn :: Parser PositionedToken Stmt
 parseReturn =     ((posLexem RETURN +.+ posLexem SEMICOLON)
                     <<< (\(ret, semicolon) -> Return (makePos ret semicolon) Nothing))
@@ -212,6 +234,9 @@ parseReturn =     ((posLexem RETURN +.+ posLexem SEMICOLON)
               ||| ((posLexem RETURN +.+ parseExpr +.+ posLexem SEMICOLON)
                     <<< (\(ret, (expr, semicolon)) -> Return (makePos ret semicolon) (Just expr)))
 
+{-
+    While = 'while' : Expr : Stmt
+-}
 parseWhile :: Parser PositionedToken Stmt
 parseWhile = (posLexem WHILE +.+ parseExpr +.+ parseStmt)
                 <<< (\(while, (expr, stmt))
@@ -226,6 +251,11 @@ parseForLoop = (posLexem FOR +.+ posLexem LBRACE +.+ parseSingletonStmt +.+ posL
                                 Block pos [stmt1, While pos bexpr (Block blockPos [block,stmt3])]
 -}
 
+{-
+    LocalVarDecl = Type : LocalName : ';' 
+                 | Type : LocalName : '=' : Expr : ';'
+-}
+
 -- note: parameter of (INTLITERAL __) is ignored
 parseLocalVarDecl :: Parser PositionedToken Stmt
 parseLocalVarDecl =     ((parseType +.+ parseLocalName +.+ posLexem SEMICOLON)
@@ -236,6 +266,10 @@ parseLocalVarDecl =     ((parseType +.+ parseLocalName +.+ posLexem SEMICOLON)
                             <<< (\((tpe, pos1), ((name, _), (_, (expr, semicolon))))
                                 -> LocalVarDecl (spanPos pos1 (position semicolon)) tpe name (Just expr)))
 
+{-
+    If = 'if' : Expr : Stmt 
+       | 'if' : Expr : Stmt : 'else' : Stmt
+-}
 parseIf :: Parser PositionedToken Stmt
 parseIf =     ((posLexem IF +.+ parseExpr +.+ parseStmt)
                 <<< (\(ifname, (expr, stmt))
@@ -245,8 +279,19 @@ parseIf =     ((posLexem IF +.+ parseExpr +.+ parseStmt)
                 <<< (\(ifname, (expr, (stmt1, (_, stmt2))))
                     -> If (spanPos (position ifname) (getPosFromStmt stmt2)) expr stmt1 (Just stmt2)))
 
+{-
+    StmtOrExprAsStmt = StmtOrExpr : ';'
+-}
 parseStmtOrExprAsStmt :: Parser PositionedToken Stmt
 parseStmtOrExprAsStmt = (parseStmtOrExpr +.+ posLexem SEMICOLON) <<< (\((stOrEx, pos1), semicolon) -> StmtOrExprAsStmt (spanPos pos1 (position semicolon)) stOrEx)
+{-
+parseThisOrSuperCall :: Parser PositionedToken Stmt 
+parseThisOrSuperCall =     ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
+                            <<< \(this, (_, (params, rb))) -> ThisCall params)
+
+                       ||| ((posLexem SUPER +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
+                            <<< \(super, (_, (params, rb))) -> SuperCall params)
+-}
 
 {-----------------------------------------------------------------------------}
 {-- # StmtOrExpr -------------------------------------------------------------}
