@@ -44,6 +44,8 @@ data Stmt
   | While Position Expr Stmt
   | LocalVarDecl Position Type LocalName (Maybe Expr)
   | If Position Expr Stmt (Maybe Stmt)
+  | ThisCall [Expr]
+  | SuperCall [Expr]
   | StmtOrExprAsStmt Position StmtOrExpr
   deriving (Show, Eq, Ord)
 

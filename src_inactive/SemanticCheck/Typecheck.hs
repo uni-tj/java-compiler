@@ -75,15 +75,15 @@ maccessCtx = fromM
 class Typed a where
   typee :: a -> Type
 instance Typed TAST.Expr where
-  typee (TAST.This _type)               = _type
-  typee (TAST.Super _type)              = _type
-  typee (TAST.LocalVar _type _)         = _type
-  typee (TAST.ClassRef _type _)         = _type
-  typee (TAST.FieldAccess _type _ _ _)  = _type
-  typee (TAST.Unary _type _ _)          = _type
-  typee (TAST.Binary _type _ _ _)       = _type
-  typee (TAST.Literal _type _)          = _type
-  typee (TAST.StmtOrExprAsExpr _type _) = _type
+  typee (TAST.This _type)                = _type
+  typee (TAST.Super _type)               = _type
+  typee (TAST.LocalVar _type _)          = _type
+  typee (TAST.ClassRef _type _)          = _type
+  typee (TAST.FieldAccess _type _ _ _ _) = _type
+  typee (TAST.Unary _type _ _)           = _type
+  typee (TAST.Binary _type _ _ _)        = _type
+  typee (TAST.Literal _type _)           = _type
+  typee (TAST.StmtOrExprAsExpr _type _)  = _type
 class AccessTag a where
   access :: a -> AccessModifier
 instance AccessTag AST.Method where access = AST.maccess
@@ -153,7 +153,7 @@ checkProgram = do
   mapM checkClass =<< gets cIasses
 
 checkClass :: AST.Class -> ExceptState TAST.Class
-checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cfields, AST.cmethods} = do
+checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cextends, AST.cfields, AST.cmethods} = do
   liftBool ("Accessibility of top level class " ++ cname ++ " must be public or package.")
     $ caccess == Public || caccess == Package
   liftBool ("Fields must have unique names in class " ++ cname)
@@ -167,7 +167,7 @@ checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cfields, AST.cmethods} = 
   return TAST.Class {
     TAST.caccess,
     TAST.cname,
-    TAST.cextends = [],
+    TAST.cextends = cextends,
     TAST.cfields = cfields',
     TAST.cmethods = cmethods'
   }
@@ -301,8 +301,9 @@ checkExpr ctx@Ctx{locals, cIass} (AST.Name pos uname) = do
         return $ TAST.LocalVar t uname
     asField = do
       mfound <- lookupField ctx (accessCtx ctx) uname
-      forM mfound $ \(fieldCIass, field) ->
-        return $ TAST.FieldAccess (AST.ftype field) (TAST.This $ Instance cIassName) fieldCIass uname
+      forM mfound $ \(fieldCIass, field) -> do
+        let this' = TAST.This (Instance cIassName)
+        return $ TAST.FieldAccess (AST.ftype field) this' fieldCIass (static field) uname
     asClass = do
       mcIass <- lookupClass uname
       forM mcIass $ \c ->
@@ -311,7 +312,7 @@ checkExpr ctx (AST.FieldAccess _ expr fname) = do
   expr' <- checkExpr ctx expr
   accCtx <- maccessCtx expr'
   (fieldCIass, field) <- resolveField ctx accCtx fname
-  return $ TAST.FieldAccess (AST.ftype field) expr' fieldCIass fname
+  return $ TAST.FieldAccess (AST.ftype field) expr' fieldCIass (static field) fname
 checkExpr ctx (AST.Unary _ op expr) = do
   expr' <- checkExpr ctx expr
   tresult <- liftMaybeM ("Operator " ++ show op ++ " is not defined on type " ++ show (typee expr') ++ ".")
@@ -370,7 +371,7 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr pos (AST.Assign mleft uname righ
       accCtx <- maccessCtx left'
       (fieldCIass, field) <- resolveField ctx accCtx uname
       checkAssignable (AST.ftype field) left'
-      return $ TAST.StmtOrExprAsExpr (AST.ftype field) $ TAST.FieldAssign left' fieldCIass uname right'
+      return $ TAST.StmtOrExprAsExpr (AST.ftype field) $ TAST.FieldAssign left' fieldCIass (static field) uname right'
     asLocal = do
       right' <- checkExpr ctx right
       let mltype = Map.lookup uname locals
@@ -383,7 +384,7 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr pos (AST.Assign mleft uname righ
       forM mfound $ \(fieldCIass, field) -> do
         checkAssignable (AST.ftype field) right'
         let this' = TAST.This (Instance $ AST.cname $ cIass ctx)
-        return $ TAST.StmtOrExprAsExpr (AST.ftype field) $ TAST.FieldAssign this' fieldCIass uname right'
+        return $ TAST.StmtOrExprAsExpr (AST.ftype field) $ TAST.FieldAssign this' fieldCIass (static field) uname right'
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.New cname args)) = do
   args' <- mapM (checkExpr ctx) args
   constructor <- resolveConstructor ctx cname (typee <$> args')
@@ -400,7 +401,7 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr mname args)) = do
   (methodCIass, method) <- resolveMethod ctx accCtx mname (typee <$> args')
   return
     $ TAST.StmtOrExprAsExpr (AST.mtype method)
-    $ TAST.MethodCall expr' methodCIass mname $ zip (tparams method) args'
+    $ TAST.MethodCall expr' methodCIass (static method) mname $ zip (tparams method) args'
   where cIassName = AST.cname $ cIass ctx
 
 {- typecheck helper functions
