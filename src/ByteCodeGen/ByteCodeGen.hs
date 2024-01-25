@@ -3,15 +3,29 @@
 {-# HLINT ignore "Use list comprehension" #-}
 
 module ByteCodeGen.ByteCodeGen where
+
+import Data.List (findIndex)
+import Data.Bits
+
 import ByteCodeGen.Jvm.Data.ClassFormat
 import Types.TAST
 import Types.Core
+
 -- import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
 -- import ByteCodeGen.JavaTestFiles.GGT.GgtTAST (ggtErw)
 import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST (classes)
 
-import Data.List (findIndex)
-import Data.Bits
+-- Question
+-- 1. What to do with chars?
+-- 2. How to calc max stack?
+-- 3. WAS DOKU
+
+-- Todo:
+-- Query CP
+-- Load constants for cp
+-- Remove negativ numbers
+-- Add putstatic 
+-- Add getstatic
 
 codeGen :: [Method_Info]
 codeGen = do
@@ -96,10 +110,8 @@ createMethodObject (cName, Method methodAccess mtype methodStatic mName methodPa
   let indexDescr = 0 -- Todo: Query CP
   let methodConstructor = cName == mName
   
-
   let attributeCode = createAttributeCode (methodConstructor, methodStatic, methodParams, methodBody)
   
-
   Method_Info {
     af_mi = AccessFlags accessFlags,
     index_name_mi = indexMethodName,
@@ -113,12 +125,13 @@ createMethodObject (cName, Method methodAccess mtype methodStatic mName methodPa
 
 createAttributeCode :: (Bool, Bool, [(Type, LocalName)], Stmt) -> Attribute_Info
 createAttributeCode (methodConstructor, methodStatic, params, body) = do
-  let indexNameAttr = 333 -- Query CP for Code
+  let indexNameAttr = 1 -- Query CP for Code
 
   let localVarArr = localVarGen (methodStatic, params, body)
   let methodCode = codeGenStmt (body, localVarArr)
 
   -- Todo: Query CP for MethodRef_Info -> java/lang/Object ... -> Is this always this case?
+  -- Can be deleted?
   let constructorCode = if methodConstructor then [42, 183,333,333] else [] 
 
   AttributeCode {
@@ -134,8 +147,7 @@ createAttributeCode (methodConstructor, methodStatic, params, body) = do
     array_attr_attr = []
   }
 
--- Function to get all local variable and store the number (index in array) of the local variable
--- -> in order to find them later
+-- Function to get all local variable and store the number (index in array) of the local variable -> in order to find them later
 -- Todo: "This" must be index 0, than function paras -> class.method(a,b) -> this=0 a=1 b=2, ... (localvar decs)
 type LocalVarArrType = [(String, Types.Core.Type)]
 localVarGen :: (Bool, [(Type, LocalName)], Stmt) -> LocalVarArrType
@@ -170,7 +182,7 @@ codeGenStmt (Return mexpr, localVarArr) = do
         Types.Core.Bool -> exprCode ++ [172] -- ireturn
         Types.Core.Char -> exprCode ++ [172] -- ireturn
         Types.Core.Instance instanceName -> exprCode ++ [176] -- areturn Todo: Is this right?
-        Types.Core.Class className -> exprCode ++ [176] -- areturn Todo: Is this right?
+        Types.Core.Class className -> error "Class can not be returned"
         _ -> []
     Nothing -> []
 
@@ -200,7 +212,8 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr) = do
             Types.Core.Instance className -> do
               let (codeExpr, t) = codeGenExpr (expr, localVarArr)
               codeExpr ++ [196, 58] ++ splitLenInTwoBytes index  -- Todo: 58 astore?
-            _ -> [] -- Todo: I cant assign a class to a var?
+            Types.Core.Class className -> error "Class can not be assigt to a var"
+            _ -> []
         Nothing -> []
     Nothing -> []
 
@@ -219,9 +232,9 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
 codeGenExpr :: (Expr, LocalVarArrType) -> ([Int], Type)
-codeGenExpr (This thisName, localVarArr) = ([42], Instance "This") -- Aload_0 -> This is 0 -- Todo: I dont know if this is right
+codeGenExpr (This thisType, localVarArr) = ([42], thisType) -- Aload_0
 
-codeGenExpr (Super superName, localVarArr) = ([], NullType) -- Todo: If we dont to inheritance than we dont need this
+codeGenExpr (Super superName, localVarArr) = ([], NullType) -- Todo: Ask
 
 codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
   let i = findIndex ((== localVarName) . fst) localVarArr
@@ -231,22 +244,21 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
         Types.Core.Int -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
         Types.Core.Bool -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int)  -- wide, iload
         Types.Core.Char -> ([196, 21] ++ splitLenInTwoBytes index, Types.Core.Int ) -- wide, iload
-        Types.Core.Instance instantName -> ([196, 25] ++ splitLenInTwoBytes index, Instance instantName) -- Todo: Is this oke?
-        -- Types.Core.Class className -> Not possible to store Class in var? Todo: Is this oke?
+        Types.Core.Instance instantName -> ([196, 25] ++ splitLenInTwoBytes index, Instance instantName) -- wide, aload
+        Types.Core.Class className -> error "Var can not have value of type class"
         _ -> ([], localVarType)
     Nothing -> ([], localVarType)
 
-codeGenExpr (ClassRef cType cName, localVarArr) = do
-  -- Todo: This is not generating any code?
-  ([], cType)
+codeGenExpr (ClassRef cType cName, localVarArr) = ([], cType)
 
+-- Todo: Add getstatic
 codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = do
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
   let getFieldCode = 180 : [333, 333] -- Todo: Query constant pool
 
   (exprCode ++ getFieldCode, fieldTyp)
 
-codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do -- for actions with only one input var like not or ++
+codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do
   let (codeExpr, t) = codeGenExpr (expr, localVarArr)
   let codeUnary = codeExpr ++ codeGenUnOparator unOparator
   (codeUnary, unaryType)
@@ -257,10 +269,9 @@ codeGenExpr (Binary typeBinary binOperator expr0 expr1, localVarArr) = do
   let codeBinOperator = codeGenBinOperator binOperator
   (codeExpr0 ++ codeExpr1 ++ codeBinOperator, typeBinary)
 
--- Todo - only load const from pool and dont push numbers ?
 codeGenExpr (Literal literalType literal, localVarArr) = do
   case literalType of
-    Types.Core.Int -> (17 : codeGenLiteral literal, literalType) -- 17 sipush -> 2 Byte
+    Types.Core.Int -> (17 : codeGenLiteral literal, literalType)
     Types.Core.Bool -> (codeGenLiteral literal, literalType)
     Types.Core.Char -> (codeGenLiteral literal, literalType)
     _ -> ([], NullType)
@@ -268,6 +279,7 @@ codeGenExpr (Literal literalType literal, localVarArr) = do
 codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (codeGenStmtOrExpr (stmtOrExpr, localVarArr), stmtOrExprAsExprType)
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
+-- Todo: Add putstatic 
 codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
   let (mExprCode, mT) =
         case mExpr of
@@ -303,15 +315,13 @@ codeGenStmtOrExpr (New className exprs, localVarArr) = do
 
 codeGenStmtOrExpr (MethodCall expr methodName paras, localVarArr) = do
   -- Todo: What if static methode of own class is called?
-  let (codeExpr, tCodeExpr) = codeGenExpr (expr, localVarArr)
+  let (codeExpr, tExpr) = codeGenExpr (expr, localVarArr)
   
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
 
-  -- Todo: invokespecial 183 -- invokestatic 184 -- invokevirtual 182
-  let codeInvoke = case tCodeExpr of
+  let codeInvoke = case tExpr of
         Types.Core.Instance instanceName -> [182, 333, 333] -- Todo: Query CP for MethodRef_Info
         Types.Core.Class className -> [184, 333, 333] -- Todo: Query CP for MethodRef_Info
-        -- Todo: What to do with invokespecial 183?
         _ -> []
   
   codeExpr ++ codeParas ++ codeInvoke
