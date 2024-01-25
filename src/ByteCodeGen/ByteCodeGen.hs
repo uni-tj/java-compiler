@@ -252,11 +252,11 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr) = do
 codeGenExpr (ClassRef cType cName, localVarArr) = ([], cType)
 
 -- Todo: Add getstatic
-codeGenExpr (FieldAccess fieldTyp expr fieldName, localVarArr) = do
+codeGenExpr (FieldAccess fieldType expr classname static fieldName, localVarArr) = do
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
   let getFieldCode = 180 : [333, 333] -- Todo: Query constant pool
 
-  (exprCode ++ getFieldCode, fieldTyp)
+  (exprCode ++ getFieldCode, fieldType)
 
 codeGenExpr (Unary unaryType unOparator expr, localVarArr) = do
   let (codeExpr, t) = codeGenExpr (expr, localVarArr)
@@ -281,7 +281,7 @@ codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (c
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 
 codeGenStmtOrExpr (LocalAssign varName expr, localVarArr) = do
-  let i = findIndex ((== localOrFieldName) . fst) localVarArr
+  let i = findIndex ((== varName) . fst) localVarArr
   case i of
     Just index ->
       let codeStore = case t of
@@ -289,13 +289,13 @@ codeGenStmtOrExpr (LocalAssign varName expr, localVarArr) = do
             Types.Core.Bool -> [196, 54]
             Types.Core.Char -> [196, 54]
             Types.Core.Instance instanceName -> [196, 58]
-            Types.Core.Class className -> [196, 58]
+            Types.Core.Class className -> error "Can assign Class to var"
             _ -> []
       in exprCode ++ codeStore ++ splitLenInTwoBytes index
     Nothing -> []
 
 -- Todo: Add putstatic 
-codeGenStmtOrExpr (FieldAssign tagetExpr className fieldName valueExpr, localVarArr) = do
+codeGenStmtOrExpr (FieldAssign tagetExpr className static fieldName valueExpr, localVarArr) = do
   let (tagetExprCode, t) = codeGenExpr (tagetExpr, localVarArr)
   let (valueExprCode, t) = codeGenExpr (valueExpr, localVarArr)
 
@@ -308,7 +308,7 @@ codeGenStmtOrExpr (New className exprs, localVarArr) = do
   
   paraCode ++ newCode
 
-codeGenStmtOrExpr (MethodCall expr methodName paras, localVarArr) = do
+codeGenStmtOrExpr (MethodCall expr className static methodName paras, localVarArr) = do
   -- Todo: What if static methode of own class is called?
   let (codeExpr, tExpr) = codeGenExpr (expr, localVarArr)
   
