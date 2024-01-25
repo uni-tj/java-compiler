@@ -8,7 +8,7 @@ classes = [
     Types.TAST.Class {
         caccess = Public, 
         cname = "ClassA", 
-        cextends = "", 
+        cextends = Nothing, 
         cfields = [
             Field {
                 faccess = Types.Core.Package, 
@@ -26,8 +26,10 @@ classes = [
                 mname = "ClassA",
                 mparams = [], 
                 mbody = Block [
-                    StmtOrExprAsStmt (Assign 
-                    (Just (This (Instance "ClassA")))
+                    StmtOrExprAsStmt (FieldAssign 
+                    (This (Instance "ClassA")) 
+                    "ClassA"
+                    False
                     "c"
                     (Literal Types.Core.Int (IntLit 10)))
                 ]
@@ -54,8 +56,13 @@ classes = [
                     Just (
                         Binary Types.Core.Int Mul 
                         (LocalVar Types.Core.Int "a") 
-                        (FieldAccess Types.Core.Int (This (Instance "ClassA")) 
-                        "c")
+                        (FieldAccess 
+                            Types.Core.Int 
+                            (This (Instance "ClassA"))
+                            "ClassA"
+                            False
+                            "c"
+                        )
                     )
                 )
             }
@@ -64,7 +71,7 @@ classes = [
     Types.TAST.Class { 
         caccess = Public, 
         cname = "ClassB",
-        cextends = "",
+        cextends = Nothing,
         cfields = [],
         cmethods = [ 
             Method { 
@@ -75,17 +82,17 @@ classes = [
                 mparams = [(StringArr, "args")],
                 mbody = Block [ 
                     LocalVarDecl Types.Core.Int "a" (Just (
-                        StmtOrExprAsExpr Types.Core.Int (MethodCall (ClassRef (Types.Core.Class "ClassA") "ClassA") "staticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5)), (Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
+                        StmtOrExprAsExpr Types.Core.Int (MethodCall (ClassRef (Types.Core.Class "ClassA") "ClassA") "ClassA" True "staticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5)), (Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
                     )), 
                     LocalVarDecl (Instance "ClassA") "classAInstance" (Just (StmtOrExprAsExpr (Types.Core.Instance "ClassA") (New "ClassA" []))),
                     LocalVarDecl Types.Core.Int "b" (Just (
-                        StmtOrExprAsExpr Types.Core.Int (MethodCall (LocalVar (Instance "ClassA") "classAInstance") "nonStaticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
+                        StmtOrExprAsExpr Types.Core.Int (MethodCall (LocalVar (Instance "ClassA") "classAInstance") "ClassA" False "nonStaticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
                     )), 
                     StmtOrExprAsStmt (
-                        MethodCall (ClassRef (Types.Core.Class "System.out") "System.out") "println" [(Types.Core.Int, LocalVar Types.Core.Int "a")]
+                        MethodCall (ClassRef (Types.Core.Class "System.out") "System.out") "System.out" False "println" [(Types.Core.Int, LocalVar Types.Core.Int "a")]
                     ), 
                     StmtOrExprAsStmt (
-                        MethodCall (ClassRef (Types.Core.Class "System.out") "System.out") "println" [(Types.Core.Int, LocalVar Types.Core.Int "b")]
+                        MethodCall (ClassRef (Types.Core.Class "System.out") "System.out") "System.out" False "println" [(Types.Core.Int, LocalVar Types.Core.Int "b")]
                     )
                 ]
             }

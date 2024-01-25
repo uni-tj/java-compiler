@@ -30,8 +30,7 @@ import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST (classes)
 -- Query CP
 -- Load constants for cp
 -- Remove negativ numbers
--- Add putstatic 
--- Add getstatic
+-- Remove consturctor code
 
 codeGen :: [Method_Info]
 codeGen = do
@@ -175,6 +174,8 @@ localVarGenBody (While _ stmt) = localVarGenBody stmt
 localVarGenBody (LocalVarDecl localType localName _) = [(localName, localType)]
 localVarGenBody (If _ stmt mStmt) = localVarGenBody stmt ++ maybe [] localVarGenBody mStmt
 localVarGenBody (StmtOrExprAsStmt _) = []
+localVarGenBody (ThisCall _ _) = []
+localVarGenBody (SuperCall _ _) = []
 
 codeGenStmt :: (Stmt, LocalVarArrType) -> [Int]
 codeGenStmt (Block blocks, localVarArr) = concatMap (\block -> codeGenStmt (block, localVarArr)) blocks
@@ -235,6 +236,11 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
   else
     codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3) ++ codeStmt
 
+-- Todo: What to do?
+codeGenStmt (ThisCall className paras, localVarArr) = []
+
+codeGenStmt (SuperCall className paras, localVarArr) = []
+
 codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
 codeGenExpr :: (Expr, LocalVarArrType) -> ([Int], Type)
@@ -287,6 +293,8 @@ codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (c
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
 
 codeGenStmtOrExpr (LocalAssign varName expr, localVarArr) = do
+  let (exprCode, t) = codeGenExpr (expr, localVarArr)
+  
   let i = findIndex ((== varName) . fst) localVarArr
   case i of
     Just index ->
@@ -300,30 +308,27 @@ codeGenStmtOrExpr (LocalAssign varName expr, localVarArr) = do
       in exprCode ++ codeStore ++ splitLenInTwoBytes index
     Nothing -> []
 
--- Todo: Add putstatic 
 codeGenStmtOrExpr (FieldAssign tagetExpr className static fieldName valueExpr, localVarArr) = do
   let (tagetExprCode, t) = codeGenExpr (tagetExpr, localVarArr)
   let (valueExprCode, t) = codeGenExpr (valueExpr, localVarArr)
 
-  tagetExprCode ++ valueExprCode ++ [181,333,333] -- Todo: Query CP of FieldRef_Info
+  if static then
+    tagetExprCode ++ valueExprCode ++ [179,333,333] -- putstatic -- Todo: Query CP of FieldRef_Info
+  else
+    tagetExprCode ++ valueExprCode ++ [181,333,333] -- putfield -- Todo: Query CP of FieldRef_Info
 
 codeGenStmtOrExpr (New className exprs, localVarArr) = do
-  -- 89 = Dup -- Todo: Query CP for Class_Info/MethodRef_Info -> Call constructor
-  let newCode = [187, 333, 333] ++ [89] ++ [183, 333, 333] 
+  let newCode = [187, 333, 333] ++ [89]{-Dup-} ++ [183, 333, 333] -- Todo: Query CP for Class_Info/MethodRef_Info -> Call constructor
   let paraCode = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) exprs
   
   paraCode ++ newCode
 
 codeGenStmtOrExpr (MethodCall expr className static methodName paras, localVarArr) = do
-  -- Todo: What if static methode of own class is called?
-  let (codeExpr, tExpr) = codeGenExpr (expr, localVarArr)
-  
+  let (codeExpr, t) = codeGenExpr (expr, localVarArr)
+
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
 
-  let codeInvoke = case tExpr of
-        Types.Core.Instance instanceName -> [182, 333, 333] -- Todo: Query CP for MethodRef_Info
-        Types.Core.Class className -> [184, 333, 333] -- Todo: Query CP for MethodRef_Info
-        _ -> []
+  let codeInvoke = if static then [184, 333, 333] else [182, 333, 333] -- Todo: Query CP for MethodRef_Info
   
   codeExpr ++ codeParas ++ codeInvoke
 

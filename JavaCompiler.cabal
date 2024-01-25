@@ -22,8 +22,6 @@ library
   exposed-modules:
       ByteCodeGen.ByteCodeGen
       ByteCodeGen.JavaTestFiles.Classes.ClassesTAST
-      ByteCodeGen.JavaTestFiles.GGT.GgtTAST
-      ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST
       ByteCodeGen.Jvm.BinaryClass
       ByteCodeGen.Jvm.Data.ClassFormat
       Types.AST
