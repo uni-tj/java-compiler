@@ -12,7 +12,7 @@ data Class = Class
   { caccess  :: AccessModifier
   , cname    :: ClassName
   -- not required
-  , cextends :: ClassName
+  , cextends :: Maybe ClassName
   , cfields  :: [Field]
   , cmethods :: [Method]
   }
@@ -43,13 +43,16 @@ data Stmt
   | While Expr Stmt
   | LocalVarDecl Type LocalName (Maybe Expr)
   | If Expr Stmt (Maybe Stmt)
+  | ThisCall ClassName [(Type, Expr)]
+  | SuperCall ClassName [(Type, Expr)]
   | StmtOrExprAsStmt StmtOrExpr
   deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = Assign (Maybe Expr) LocalOrFieldName Expr
+  = LocalAssign LocalName Expr
+  | FieldAssign Expr ClassName {-static::-}Bool FieldName Expr
   | New ClassName [(Type, Expr)]
-  | MethodCall Expr MethodName [(Type, Expr)]
+  | MethodCall Expr ClassName {-static::-}Bool MethodName [(Type, Expr)]
   deriving (Show, Eq, Ord)
 
 data Expr
@@ -57,7 +60,7 @@ data Expr
   | Super Type
   | LocalVar Type LocalName
   | ClassRef Type ClassName
-  | FieldAccess Type Expr FieldName
+  | FieldAccess Type Expr ClassName {-static::-}Bool FieldName
   | Unary Type UnOparator Expr
   | Binary Type BinOperator Expr Expr
   | Literal Type Literal

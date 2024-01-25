@@ -12,27 +12,29 @@ data Class = Class
   { caccess  :: AccessModifier
   , cname    :: ClassName
   -- not required
-  , cextends :: ClassName
+  , cextends :: Maybe ClassName
   , cfields  :: [Field]
   , cmethods :: [Method]
   }
   deriving (Show, Eq, Ord)
 
 data Field = Field
-  { faccess :: AccessModifier
-  , fstatic :: Bool
-  , ftype   :: Type
-  , fname   :: FieldName
-  , finit   :: Maybe Expr
+  { foverride :: Bool
+  , faccess   :: AccessModifier
+  , fstatic   :: Bool
+  , ftype     :: Type
+  , fname     :: FieldName
+  , finit     :: Maybe Expr
   }
   deriving (Show, Eq, Ord)
 data Method = Method
-  { maccess :: AccessModifier
-  , mstatic :: Bool
-  , mtype   :: Type
-  , mname   :: FieldName
-  , mparams :: [(Type, LocalName)]
-  , mbody   :: Stmt
+  { moverride :: Bool
+  , maccess   :: AccessModifier
+  , mstatic   :: Bool
+  , mtype     :: Type
+  , mname     :: FieldName
+  , mparams   :: [(Type, LocalName)]
+  , mbody     :: Stmt
   }
   deriving (Show, Eq, Ord)
 
@@ -42,6 +44,8 @@ data Stmt
   | While Position Expr Stmt
   | LocalVarDecl Position Type LocalName (Maybe Expr)
   | If Position Expr Stmt (Maybe Stmt)
+  | ThisCall [Expr]
+  | SuperCall [Expr]
   | StmtOrExprAsStmt Position StmtOrExpr
   deriving (Show, Eq, Ord)
 
