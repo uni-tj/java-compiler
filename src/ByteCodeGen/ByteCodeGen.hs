@@ -279,32 +279,27 @@ codeGenExpr (Literal literalType literal, localVarArr) = do
 codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (codeGenStmtOrExpr (stmtOrExpr, localVarArr), stmtOrExprAsExprType)
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
+
+codeGenStmtOrExpr (LocalAssign varName expr, localVarArr) = do
+  let i = findIndex ((== localOrFieldName) . fst) localVarArr
+  case i of
+    Just index ->
+      let codeStore = case t of
+            Types.Core.Int -> [196, 54]
+            Types.Core.Bool -> [196, 54]
+            Types.Core.Char -> [196, 54]
+            Types.Core.Instance instanceName -> [196, 58]
+            Types.Core.Class className -> [196, 58]
+            _ -> []
+      in exprCode ++ codeStore ++ splitLenInTwoBytes index
+    Nothing -> []
+
 -- Todo: Add putstatic 
-codeGenStmtOrExpr (Assign mExpr localOrFieldName expr, localVarArr) = do
-  let (mExprCode, mT) =
-        case mExpr of
-          Just justExpr -> codeGenExpr (justExpr, localVarArr)
-          Nothing -> ([], NullType)
+codeGenStmtOrExpr (FieldAssign tagetExpr className fieldName valueExpr, localVarArr) = do
+  let (tagetExprCode, t) = codeGenExpr (tagetExpr, localVarArr)
+  let (valueExprCode, t) = codeGenExpr (valueExpr, localVarArr)
 
-  let (exprCode, t) = codeGenExpr (expr, localVarArr)
-
-  if length mExprCode > 0 then
-    -- putfield
-    mExprCode ++ exprCode ++ [181,333,333] -- Todo: Query CP of FieldRef_Info
-  else do
-    -- Non putfield
-    let i = findIndex ((== localOrFieldName) . fst) localVarArr
-    case i of
-      Just index ->
-        let codeStore = case t of
-              Types.Core.Int -> [196, 54]
-              Types.Core.Bool -> [196, 54]
-              Types.Core.Char -> [196, 54]
-              Types.Core.Instance instanceName -> [196, 58]
-              Types.Core.Class className -> [196, 58]
-              _ -> []
-        in exprCode ++ codeStore ++ splitLenInTwoBytes index
-      Nothing -> []
+  tagetExprCode ++ valueExprCode ++ [181,333,333] -- Todo: Query CP of FieldRef_Info
 
 codeGenStmtOrExpr (New className exprs, localVarArr) = do
   -- 89 = Dup -- Todo: Query CP for Class_Info/MethodRef_Info -> Call constructor

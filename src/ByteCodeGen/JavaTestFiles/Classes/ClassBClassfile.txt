@@ -62,9 +62,9 @@ ClassFile {
                         len_local_attr = 1, 
                         tam_code_attr = 5, 
                         array_code_attr = [
-                            42,
-                            183,0,1,
-                            177
+                            42, -- This
+                            183,0,1, -- invokespecial java/lang/Object
+                            177 -- return
                         ], 
                         tam_ex_attr = 0, 
                         array_ex_attr = [], 
