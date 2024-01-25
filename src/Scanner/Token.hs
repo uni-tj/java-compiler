@@ -31,6 +31,8 @@ data Token
      | SIGNEDSHIFTRIGHT         -- >>
      | UNSIGNEDSHIFTRIGHT       -- >>>
      
+     | OVERRIDE                 -- @Override
+
      | PUBLIC                   -- public 
      | PROTECTED                -- protected
      | PRIVATE                  -- private
