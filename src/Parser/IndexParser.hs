@@ -125,19 +125,19 @@ parseClassEntry =  (parseMethodDecl <<< Right)
 {-- # Methods ----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-{- # static flag, reduces to bool, weather token is present or not
+{-  static flag, reduces to bool, weather token is present or not
     Static = e | 'static'
 -}
 parseStatic :: Parser PositionedToken Bool -- rename to parseStatic
 parseStatic = (posLexem STATIC <<< const True) ||| succeed False
 
-{- # override annotation, recudes to bool, weather token is present or not
+{-  override annotation, recudes to bool, weather token is present or not
     Override = e | '@Override'
 -}
 parseOverride :: Parser PositionedToken Bool 
 parseOverride = (posLexem OVERRIDE <<< const True) ||| succeed False
 
-{- # method declaration, reduces to Types.AST.Method
+{-  method declaration, reduces to Types.AST.Method
     MthdDeclaration = Visibility : Static : Type : Name : '(' : MthdParams :  ')' : Block 
                     | Visibility : Name : '(' : MthdParams : ')' : Block 
 -}
@@ -172,7 +172,7 @@ parseMethodParams =     succeed []
 {-- # Fields -----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-{- # field declaration, reduces to Types.AST.Field
+{-  field declaration, reduces to Types.AST.Field
     FieldDeclaration = Visibility : Static : Type : Name : "=" : Expr : ';'
                      | Visibliity : Static : Type : Name : ";"
 -}
@@ -202,7 +202,7 @@ parseStmt =     parseReturn
             ||| parseIf
             ||| parseStmtOrExprAsStmt
  --         ||| parseThisOrSuperCall
- --         ||| parseEmptyStmt
+            ||| parseEmptyStmt
 
 {-
 parseSingletonStmt :: Parser PositionedToken Stmt
@@ -221,8 +221,8 @@ parseStmts = many parseStmt
           | '{' : '}' 
 -}
 parseBlock :: Parser PositionedToken Stmt
-parseBlock =     (posLexem LBRACKET +.+ parseStmts +.+ posLexem RBRACKET) <<< (\(lb, (stmts, rb)) -> Block (makePos lb rb) stmts)
-             ||| (posLexem LBRACKET +.+ posLexem RBRACKET) <<< \(lb, rb) -> Block (makePos lb rb) []
+parseBlock =     ((posLexem LBRACKET +.+ parseStmts +.+ posLexem RBRACKET) <<< (\(lb, (stmts, rb)) -> Block (makePos lb rb) stmts))
+             ||| ((posLexem LBRACKET +.+ posLexem RBRACKET) <<< \(lb, rb) -> Block (makePos lb rb) [])
 
 {-
     Return = 'return' : ';' | 'return' : Expr : ';'
@@ -292,6 +292,9 @@ parseThisOrSuperCall =     ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallPara
                        ||| ((posLexem SUPER +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
                             <<< \(super, (_, (params, rb))) -> SuperCall params)
 -}
+
+parseEmptyStmt :: Parser PositionedToken Stmt 
+parseEmptyStmt = posLexem SEMICOLON <<< \semicolon -> Block (position semicolon) []
 
 {-----------------------------------------------------------------------------}
 {-- # StmtOrExpr -------------------------------------------------------------}
