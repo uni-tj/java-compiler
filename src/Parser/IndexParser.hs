@@ -10,7 +10,7 @@ import Types.Core
       LocalName,
       LocalOrFieldOrClassName,
       MethodName,
-      Type(StringArr, Instance, Char, Int, Bool, Void, Class),
+      Type(StringArr, Char, Int, Bool, Void, Class),
       UnOparator(..) )
 import Types.AST
     ( Position(..),
@@ -21,11 +21,11 @@ import Types.AST
       Stmt(..),
       Expr(..),
       StmtOrExpr(..),
-      Literal(..) )
+      Literal(..), 
+      Constructor(..))
 import Parser.Combinators
 import Scanner.Token
 import Scanner.Lexer
-import Data.Either (lefts, rights)
 
 -- computing the position spanning from position 1 to position 2
 spanPos :: Position -> Position -> Position
@@ -43,6 +43,8 @@ getPosFromStmt stmt = case stmt of
     (If pos _ _ _) -> pos
     (StmtOrExprAsStmt pos _) -> pos
     (While pos _ _) -> pos
+    (SuperCall _)-> Position {start = (0,0), end = (0,0)} -- there is no position in superCall
+    (ThisCall _) -> Position {start = (0,0), end = (0,0)} -- there is no position in thisCall
 
 getPosFromExpr :: Expr -> Position
 getPosFromExpr expr = case expr of
@@ -95,31 +97,61 @@ parseClass :: Parser PositionedToken Types.AST.Class
 parseClass =    ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem EXTENDS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET)
                 <<< (\(vis, (_, (name, (_ , (supName, (_, (cblock,_)))))))
                     -> Types.AST.Class { caccess = vis, cname = fst name, cextends = Just (fst supName),
-                               cfields = getFields cblock, cmethods = getMethods cblock}))
+                               cfields = getFields cblock, cmethods = getMethods cblock, cconstructors = getConstructors cblock}))
 
             ||| ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET )
                 <<< (\(vis, (_, (name, (_, (cblock,_)))))
                     -> Types.AST.Class { caccess = vis, cname = fst name, cextends = Nothing, --nothing indicating: extends Object
-                               cfields = getFields cblock, cmethods = getMethods cblock}))
+                               cfields = getFields cblock, cmethods = getMethods cblock, cconstructors = getConstructors cblock}))
 
-getFields :: [Either Field Method] -> [Field]
-getFields = lefts
+--temporary data type for class entries
+data ClassEntry = ClassConstructor Constructor
+                | ClassMethod Method
+                | ClassField Field
 
-getMethods :: [Either Field Method] -> [Method]
-getMethods = rights
+getFields :: [ClassEntry] -> [Field]
+getFields cs = [fld | ClassField fld <- cs]
+
+getMethods :: [ClassEntry] -> [Method]
+getMethods cs = [mth | ClassMethod mth <- cs]
+
+getConstructors :: [ClassEntry] -> [Constructor]
+getConstructors cs = [cr | ClassConstructor cr <- cs]
 
 {-
     ClassBody = e 
               | FieldDeclaration : ClassBody 
-              | MthdDeclaration : ClassBody 
+              | MthdDeclaration : ClassBody
+              | ConstructorDeclaration : ClassBody
 -}
-parseClassBody :: Parser PositionedToken [Either Field Method]
+parseClassBody :: Parser PositionedToken [ClassEntry]
 parseClassBody = many parseClassEntry
 
 -- parsing either field-declaration or method-declaration
-parseClassEntry :: Parser PositionedToken (Either Field Method)
-parseClassEntry =  (parseMethodDecl <<< Right)
-               ||| (parseFieldDecl <<< Left)
+parseClassEntry :: Parser PositionedToken ClassEntry
+parseClassEntry =     (parseMethodDecl      <<< ClassMethod)
+                  ||| (parseConstructorDecl <<< ClassConstructor)
+                  ||| (parseFieldDecl       <<< ClassField)
+
+{-----------------------------------------------------------------------------}
+{-- # Constructors -----------------------------------------------------------}
+{-----------------------------------------------------------------------------}
+
+
+parseConstructorDecl :: Parser PositionedToken Types.AST.Constructor
+parseConstructorDecl = (parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ 
+                        posLexem LBRACKET +.+ parseThisOrSuperCall +.+ parseStmts +.+ posLexem RBRACKET)
+                        <<< (\(vis, (name, (_, (params, (_, (lB, (thsSupCall, (body, rB))))))))
+                            -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = Block (makePos lB rB) (thsSupCall ++ body)})
+
+parseThisOrSuperCall :: Parser PositionedToken  [Stmt]
+parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
+                            <<< \(_, (_, (params, _))) 
+                                -> [ThisCall params])
+
+                       ||| ((posLexem SUPER +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
+                            <<< \(_, (_, (params, _))) 
+                                -> [SuperCall params])
 
 {-----------------------------------------------------------------------------}
 {-- # Methods ----------------------------------------------------------------}
@@ -142,17 +174,11 @@ parseOverride = (posLexem OVERRIDE <<< const True) ||| succeed False
                     | Visibility : Name : '(' : MthdParams : ')' : Block 
 -}
 parseMethodDecl :: Parser PositionedToken Types.AST.Method
-parseMethodDecl =     ((parseOverride +.+ parseVisibility +.+ parseStatic +.+ parseType +.+ parseMethodName +.+ posLexem LBRACE -- parsing regular method decl
-                        +.+ parseMethodParams +.+ posLexem RBRACE +.+ parseBlock)
-                            <<< (\(ovrFlg, (vis,(stc, ((retType, _),((name, _), (_, (params, (_, block))))))))
-                                -> Method {maccess = vis, mtype = retType, mstatic = stc, mname = name,
-                                    mparams = params, mbody = block, moverride = ovrFlg}))
-
-                  ||| ((parseOverride +.+ parseVisibility +.+ parseMethodName +.+ posLexem LBRACE +.+ parseMethodParams          -- parsing a constructor
-                        +.+ posLexem RBRACE +.+ parseBlock)
-                            <<< (\(ovrFlg, (vis,((name, _), (_, (params, (_, block))))))
-                                -> Method {maccess = vis, mtype = Instance name, mstatic = False, mname = name,
-                                    mparams = params, mbody = block, moverride = ovrFlg}))
+parseMethodDecl = (parseOverride +.+ parseVisibility +.+ parseStatic +.+ parseType +.+ parseMethodName +.+ posLexem LBRACE -- parsing regular method decl
+                    +.+ parseMethodParams +.+ posLexem RBRACE +.+ parseBlock)
+                        <<< (\(ovrFlg, (vis,(stc, ((retType, _),((name, _), (_, (params, (_, block))))))))
+                            -> Method {maccess = vis, mtype = retType, mstatic = stc, mname = name,
+                                mparams = params, mbody = block, moverride = ovrFlg})
 
 {-
     MthdParams = e | Type : Name | Type : Name : ',' : MthdParams
