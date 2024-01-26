@@ -72,22 +72,28 @@ accessCtx = from
 maccessCtx :: FromPartial AccessCtx a String => a -> ExceptState AccessCtx
 maccessCtx = fromM
 
-class Typed a where
+class TypeTag a where
   typee :: a -> Type
-instance Typed TAST.Expr where
-  typee (TAST.This _type)                = _type
-  typee (TAST.Super _type)               = _type
-  typee (TAST.LocalVar _type _)          = _type
-  typee (TAST.ClassRef _type _)          = _type
-  typee (TAST.FieldAccess _type _ _ _ _) = _type
-  typee (TAST.Unary _type _ _)           = _type
-  typee (TAST.Binary _type _ _ _)        = _type
-  typee (TAST.Literal _type _)           = _type
-  typee (TAST.StmtOrExprAsExpr _type _)  = _type
+instance TypeTag TAST.Expr where
+  typee (TAST.This _type)                                          = _type
+  typee (TAST.Super _type)                                         = _type
+  typee (TAST.LocalVar _type _)                                    = _type
+  typee (TAST.ClassRef _type _)                                    = _type
+  typee (TAST.FieldAccess _type _ _ _ _)                           = _type
+  typee (TAST.Unary _type _ _)                                     = _type
+  typee (TAST.Binary _type _ _ _)                                  = _type
+  typee (TAST.Literal _type _)                                     = _type
+  typee (TAST.StmtOrExprAsExpr (TAST.LocalAssign _type _ _))       = _type
+  typee (TAST.StmtOrExprAsExpr (TAST.FieldAssign _type _ _ _ _ _)) = _type
+  typee (TAST.StmtOrExprAsExpr (TAST.New _type _ _))               = _type
+  typee (TAST.StmtOrExprAsExpr (TAST.MethodCall _type _ _ _ _ _))  = _type
+instance TypeTag AST.Method where typee = AST.mtype
+instance TypeTag AST.Field  where typee = AST.ftype
 class AccessTag a where
   access :: a -> AccessModifier
-instance AccessTag AST.Method where access = AST.maccess
-instance AccessTag AST.Field  where access = AST.faccess
+instance AccessTag AST.Method      where access = AST.maccess
+instance AccessTag AST.Constructor where access = AST.craccess
+instance AccessTag AST.Field       where access = AST.faccess
 class StaticTag a where
   static :: a -> Bool
 instance StaticTag AST.Method where static = AST.mstatic
@@ -96,9 +102,19 @@ instance StaticTag ExprCtx    where static = staticCtx
 instance StaticTag AccessCtx  where static = astatic
 class NameTag a where
   name :: a -> String
-instance NameTag AST.Method where name = AST.mname
-instance NameTag AST.Field  where name = AST.fname
-instance NameTag AccessCtx  where name = aname
+instance NameTag AST.Method      where name = AST.mname
+instance NameTag AST.Constructor where name = AST.crname
+instance NameTag AST.Field       where name = AST.fname
+instance NameTag AST.Class       where name = AST.cname
+instance NameTag AccessCtx       where name = aname
+class ParamsTag a where
+  params :: a -> [(Type, Identifier)]
+  ptypes :: a -> [Type]
+  ptypes = fmap fst . params
+  pnames :: a -> [Identifier]
+  pnames = fmap snd . params
+instance ParamsTag AST.Method      where params = AST.mparams
+instance ParamsTag AST.Constructor where params = AST.crparams
 class From b a where from :: a -> b
 instance From AccessCtx ExprCtx where
   from exprCtx = AccessCtx { astatic = static exprCtx, aname = AST.cname $ cIass exprCtx}
@@ -112,8 +128,9 @@ instance FromPartial AccessCtx TAST.Expr String where
 showSignature :: Identifier -> [Type] -> String
 showSignature fname partypes = fname ++ "(" ++ intercalate ", " (show <$> partypes) ++ ")"
 
-tparams :: AST.Method -> [Type]
-tparams = fmap fst . AST.mparams
+isBlock :: AST.Stmt -> Bool
+isBlock AST.Block{} = True
+isBlock _           = False
 
 -- type ThisCtx = Excepting String
 -- type StaticCtx = Bool
@@ -153,7 +170,7 @@ checkProgram = do
   mapM checkClass =<< gets cIasses
 
 checkClass :: AST.Class -> ExceptState TAST.Class
-checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cextends, AST.cfields, AST.cmethods} = do
+checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cextends, AST.cfields, AST.cmethods, AST.cconstructors} = do
   liftBool ("Accessibility of top level class " ++ cname ++ " must be public or package.")
     $ caccess == Public || caccess == Package
   liftBool ("Fields must have unique names in class " ++ cname)
@@ -164,12 +181,14 @@ checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cextends, AST.cfields, AS
     $ hasNoDuplicates (name <$> cmethods)
   cfields' <- mapM (checkField cIass) cfields
   cmethods' <- mapM (checkMethod cIass) cmethods
+  cconstructors' <- mapM (checkConstructor cIass) cconstructors
   return TAST.Class {
     TAST.caccess,
     TAST.cname,
     TAST.cextends = cextends,
     TAST.cfields = cfields',
-    TAST.cmethods = cmethods'
+    TAST.cmethods = cmethods',
+    TAST.cconstructors = cconstructors'
   }
   where safeTails = mapMaybe uncons . tails
 
@@ -186,9 +205,10 @@ checkField cIass AST.Field { AST.faccess, AST.fstatic, AST.ftype, AST.fname, AST
 
 checkMethod :: AST.Class -> AST.Method -> ExceptState TAST.Method
 checkMethod cIass method@AST.Method{ AST.moverride, AST.maccess, AST.mstatic, AST.mtype, AST.mname, AST.mparams, AST.mbody } = do
-  when (mname == AST.cname cIass) $ checkConstructor cIass method
   liftBool ("Parameters must have unique names in method " ++ AST.cname cIass ++ "." ++ mname ++ ".")
     $ hasNoDuplicates (snd <$> mparams)
+  liftBool ("Body of method " ++ name cIass ++ "." ++ showSignature mname (fst <$> mparams) ++ " must be a block")
+    $ isBlock mbody
   (mbody', defReturn) <- checkStmt Ctx{locals,cIass,staticCtx=mstatic} mtype mbody
   liftBool ("Not all paths return a value in method " ++ AST.cname cIass ++ "." ++ mname ++ ".")
     $ mtype == Void || defReturn
@@ -215,24 +235,34 @@ checkMethod cIass method@AST.Method{ AST.moverride, AST.maccess, AST.mstatic, AS
         findOverridden (Just cIassName) = do
           cIass <- resolveClass cIassName
           let moverridden = flip find (AST.cmethods cIass)$ \m ->
-                AST.mname m == AST.mname method
-                && tparams m == tparams method
-                && AST.maccess m < Private -- private methods are just not visible
+                name m == name method
+                && ptypes m == ptypes method
+                && access m < Private -- private methods are just not visible
           return ((cIass,) <$> moverridden) <<>^ findOverridden (AST.cextends cIass)
 
-checkConstructor :: AST.Class -> AST.Method -> ExceptState ()
-checkConstructor _ AST.Method{ AST.mtype, AST.mname, AST.mbody } = do
-  liftBool ("Expected constructor of class " ++ mname ++ " to have return type void.")
-    $ mtype == Void
-  checkReturn mbody
-  where checkReturn :: AST.Stmt -> ExceptState ()
+checkConstructor :: AST.Class -> AST.Constructor -> ExceptState TAST.Constructor
+checkConstructor cIass cr@AST.Constructor{ AST.craccess, AST.crparams, AST.crbody } = do
+  liftBool ("Parameters must have unique names in constructor " ++ showSignature (name cIass) (ptypes cr) ++ ".")
+    $ hasNoDuplicates (pnames cr)
+  liftBool ("Body of constructor " ++ showSignature (name cIass) (ptypes cr) ++ " must be a block")
+    $ isBlock crbody
+  (crbody',_) <- checkStmt Ctx{locals,cIass,staticCtx=False} Void crbody
+  checkReturn crbody -- instead of defReturn check
+  return TAST.Constructor {
+    TAST.craccess,
+    TAST.crparams,
+    TAST.crbody = crbody'
+  }
+  where locals = Map.fromList $ swap <$> crparams
+        checkReturn :: AST.Stmt -> ExceptState ()
         checkReturn (AST.Block _ stmts) = forM_ stmts checkReturn
         checkReturn (AST.Return pos mexpr) = when (isJust mexpr) $ throwError ("Unexpected return value at " ++ show pos)
         checkReturn (AST.While _ _ stmt) = checkReturn stmt
         checkReturn (AST.LocalVarDecl {}) = return ()
         checkReturn (AST.If _ _ stmt1 mstmt2) = checkReturn stmt1 >> forM_ mstmt2 checkReturn
+        checkReturn (AST.ThisCall _) = return ()
+        checkReturn (AST.SuperCall _) = return ()
         checkReturn (AST.StmtOrExprAsStmt _ _) = return ()
-
 
 checkStmt :: ExprCtx -> {-target::-}Type -> AST.Stmt -> ExceptState (TAST.Stmt, {-definiteReturn::-}Bool)
 checkStmt _   _      (AST.Block _ []) =
@@ -278,10 +308,12 @@ checkStmt ctx target (AST.If _ cond ifBranch melseBranch) = do
   (ifBranch', defReturn1) <- checkStmt ctx target ifBranch
   (melseBranch', mdefReturn2) <- unzip <$> mapM (checkStmt ctx target) melseBranch
   return (TAST.If cond' ifBranch' melseBranch', defReturn1 && fromMaybe False mdefReturn2)
+checkStmt _   _      (AST.ThisCall _)  = undefined -- TODO: implement
+checkStmt _   _      (AST.SuperCall _) = undefined -- TODO: implement
 checkStmt ctx _      (AST.StmtOrExprAsStmt pos stmtExpr) = do
   expr' <- checkExpr ctx $ AST.StmtOrExprAsExpr pos stmtExpr
    -- This is safe, as AST.StmtOrExprAsExpr is used as input
-  let (TAST.StmtOrExprAsExpr _ stmtExpr') = expr'
+  let (TAST.StmtOrExprAsExpr stmtExpr') = expr'
   return (TAST.StmtOrExprAsStmt stmtExpr', False)
 
 checkExpr :: ExprCtx -> AST.Expr -> ExceptState TAST.Expr
@@ -371,26 +403,26 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr pos (AST.Assign mleft uname righ
       accCtx <- maccessCtx left'
       (fieldCIass, field) <- resolveField ctx accCtx uname
       checkAssignable (AST.ftype field) left'
-      return $ TAST.StmtOrExprAsExpr (AST.ftype field) $ TAST.FieldAssign left' fieldCIass (static field) uname right'
+      return $ TAST.StmtOrExprAsExpr $ TAST.FieldAssign (typee field) left' fieldCIass (static field) uname right'
     asLocal = do
       right' <- checkExpr ctx right
       let mltype = Map.lookup uname locals
       forM mltype $ \ltype -> do
         checkAssignable ltype right'
-        return $ TAST.StmtOrExprAsExpr (typee right') $ TAST.LocalAssign uname right'
+        return $ TAST.StmtOrExprAsExpr $ TAST.LocalAssign ltype uname right'
     asField = do
       mfound <- lookupField ctx (accessCtx ctx) uname
       right' <- checkExpr ctx right
       forM mfound $ \(fieldCIass, field) -> do
         checkAssignable (AST.ftype field) right'
         let this' = TAST.This (Instance $ AST.cname $ cIass ctx)
-        return $ TAST.StmtOrExprAsExpr (AST.ftype field) $ TAST.FieldAssign this' fieldCIass (static field) uname right'
+        return $ TAST.StmtOrExprAsExpr $ TAST.FieldAssign (typee field) this' fieldCIass (static field) uname right'
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.New cname args)) = do
   args' <- mapM (checkExpr ctx) args
   constructor <- resolveConstructor ctx cname (typee <$> args')
   return
-    $ TAST.StmtOrExprAsExpr (Instance cname)
-    $ TAST.New cname $ zip (tparams constructor) args'
+    $ TAST.StmtOrExprAsExpr
+    $ TAST.New (Instance cname) cname $ zip (ptypes constructor) args'
 checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr mname args)) = do
   mexpr' <- mapM (checkExpr ctx) mexpr
   let expr' = flip fromMaybe mexpr' $ if static ctx
@@ -400,8 +432,8 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr mname args)) = do
   accCtx <- maccessCtx expr'
   (methodCIass, method) <- resolveMethod ctx accCtx mname (typee <$> args')
   return
-    $ TAST.StmtOrExprAsExpr (AST.mtype method)
-    $ TAST.MethodCall expr' methodCIass (static method) mname $ zip (tparams method) args'
+    $ TAST.StmtOrExprAsExpr
+    $ TAST.MethodCall (typee method) expr' methodCIass (static method) mname $ zip (ptypes method) args'
   where cIassName = AST.cname $ cIass ctx
 
 {- typecheck helper functions
@@ -425,35 +457,33 @@ lookupMethod exprCtx accCtx mname targs = do
         =<< filterM (isAccessible exprCtx cIass)
         =<< filterM (`isApplicableTo` targs)
         (   filter  (hasName mname)
-        $   filter  (not . hasName cIassName) -- exclude construcors
         $   AST.cmethods cIass)
 resolveMethod :: ExprCtx -> AccessCtx -> Identifier -> [Type] -> ExceptState (Identifier, AST.Method)
 resolveMethod exprCtx accCtx mname targs =
   liftMaybe ("No accessible method " ++ showSignature mname targs ++ " found on class " ++ name accCtx ++ ".")
   =<< lookupMethod exprCtx accCtx mname targs
 
-lookupConstructor :: ExprCtx -> Identifier -> [Type] -> ExceptState (Maybe AST.Method)
+lookupConstructor :: ExprCtx -> Identifier -> [Type] -> ExceptState (Maybe AST.Constructor)
 lookupConstructor ctx cIassName targs = do
   cIass <- resolveClass cIassName
   mfound <- foldlM (chooseMostSpecific cIassName) Nothing
     =<< filterM (isAccessible ctx cIass)
     =<< filterM (`isApplicableTo` targs)
-    (   filter  (hasName cIassName) -- only constructors
-    $   AST.cmethods cIass)
+    (   AST.cconstructors cIass)
   return $ snd <$> mfound
-resolveConstructor :: ExprCtx -> Identifier -> [Type] -> ExceptState AST.Method
+resolveConstructor :: ExprCtx -> Identifier -> [Type] -> ExceptState AST.Constructor
 resolveConstructor ctx cIassName targs =
   liftMaybe ("No accessible constructor " ++ showSignature cIassName targs ++ " found on class " ++ cIassName ++ ".")
   =<< lookupConstructor ctx cIassName targs
 
-chooseMostSpecific :: Identifier -> Maybe (Identifier, AST.Method) -> AST.Method -> ExceptState (Maybe (Identifier, AST.Method))
+chooseMostSpecific :: (ParamsTag p, NameTag p) => Identifier -> Maybe (Identifier, p) -> p -> ExceptState (Maybe (Identifier, p))
 chooseMostSpecific cIassName Nothing         m2 =
   return $ Just (cIassName, m2)
 chooseMostSpecific cIassName (Just (cN1,m1)) m2 = condM
-  [(tparams m1 =~: tparams m2, return $ Just (cIassName, m2)                                  )
-  ,(tparams m1 <~: tparams m2, return $ Just (cN1, m1)                                        )
-  ,(tparams m2 <~: tparams m1, return $ Just (cIassName, m2)                                  )
-  ,(otherwiseM               , throwError $ "Reference to " ++ AST.mname m1 ++ " is ambiguous")
+  [(ptypes m1 =~: ptypes m2, return $ Just (cIassName, m2)                                  )
+  ,(ptypes m1 <~: ptypes m2, return $ Just (cN1, m1)                                        )
+  ,(ptypes m2 <~: ptypes m1, return $ Just (cIassName, m2)                                  )
+  ,(otherwiseM               , throwError $ "Reference to " ++ name m1 ++ " is ambiguous")
   ]
   where (=~:) = return .* (==)
 
@@ -503,10 +533,10 @@ anchestors cIass = anchestors' (AST.cextends cIass) []
           super <- resolveClass superName
           anchestors' (AST.cextends super) (AST.cname super : found)
 
-isApplicableTo :: AST.Method -> [Type] -> ExceptState Bool
+isApplicableTo :: ParamsTag p => p -> [Type] -> ExceptState Bool
 method `isApplicableTo` targs = matchingLength &&^ matchingTypes
-  where matchingLength = return $ length (AST.mparams method) == length targs
-        matchingTypes  = and <$> zipWithM (<:) targs (tparams method)
+  where matchingLength = return $ length (params method) == length targs
+        matchingTypes  = and <$> zipWithM (<:) targs (ptypes method)
 
 -- Return whether parameter types of one method are a specialization of another
 (<~:) :: [Type] -> [Type] -> ExceptState Bool
