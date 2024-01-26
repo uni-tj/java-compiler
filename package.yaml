@@ -11,10 +11,13 @@ description: Please see the README
 
 dependencies:
   - base >= 4.7 && < 5
+  - bytestring
   - mtl
   - containers
   - binary
   - bytestring
+  - uulib
+  - text
   - extra >= 1.7.13
   - composition-prelude >= 3.0.0.0
   - composition-extra >= 2.0.0
@@ -35,6 +38,7 @@ library:
 
 executables:
   JavaCompiler-exe:
+<<<<<<< HEAD
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -43,6 +47,16 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - JavaCompiler
+=======
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - JavaCompiler
+>>>>>>> CP
 
 tests:
   JavaCompiler-test:

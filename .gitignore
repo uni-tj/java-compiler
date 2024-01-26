@@ -1,5 +1,7 @@
 .stack-work/
 *~
+JavaCompiler.cabal
+stack.yaml.lock
 
 .vscode
 .DS_Store
