@@ -97,12 +97,12 @@ parseClass :: Parser PositionedToken Types.AST.Class
 parseClass =    ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem EXTENDS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET)
                 <<< (\(vis, (_, (name, (_ , (supName, (_, (cblock,_)))))))
                     -> Types.AST.Class { caccess = vis, cname = fst name, cextends = Just (fst supName),
-                               cfields = getFields cblock, cmethods = getMethods cblock, cconstructors = getConstructors cblock}))
+                               cfields = getFields cblock, cmethods = getMethods cblock, cconstructors = getConstructors cblock (fst name)}))
 
             ||| ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET )
                 <<< (\(vis, (_, (name, (_, (cblock,_)))))
                     -> Types.AST.Class { caccess = vis, cname = fst name, cextends = Nothing, --nothing indicating: extends Object
-                               cfields = getFields cblock, cmethods = getMethods cblock, cconstructors = getConstructors cblock}))
+                               cfields = getFields cblock, cmethods = getMethods cblock, cconstructors = getConstructors  cblock (fst name)}))
 
 --temporary data type for class entries
 data ClassEntry = ClassConstructor Constructor
@@ -110,13 +110,14 @@ data ClassEntry = ClassConstructor Constructor
                 | ClassField Field
 
 getFields :: [ClassEntry] -> [Field]
-getFields cs = [fld | ClassField fld <- cs]
+getFields ce = [fld | ClassField fld <- ce]
 
 getMethods :: [ClassEntry] -> [Method]
-getMethods cs = [mth | ClassMethod mth <- cs]
+getMethods ce = [mth | ClassMethod mth <- ce]
 
-getConstructors :: [ClassEntry] -> [Constructor]
-getConstructors cs = [cr | ClassConstructor cr <- cs]
+-- here is checked, weather the contructor has the correct name
+getConstructors :: [ClassEntry] -> ClassName -> [Constructor]
+getConstructors ce name = [if crname cr == name then cr else error "wrong name for constructor" | ClassConstructor cr <- ce]
 
 {-
     ClassBody = e 
