@@ -57,9 +57,9 @@ createClassFile classInfo = do
 
       ],
     -- TODO:
-    acfg = AccessFlags [1, 32],
-    this = ThisClass {index_th = 8},
-    super = SuperClass {index_sp = 2},
+    acfg = AccessFlags [], -- Todo: Calc Flags
+    this = ThisClass {index_th = 8}, -- Query cp
+    super = SuperClass {index_sp = 2}, -- Query cp
     --
     count_interfaces = 0,
     array_interfaces = [],
