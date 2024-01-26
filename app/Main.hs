@@ -40,161 +40,37 @@ testMethodDescriptor2 =
 simpleClassTAST :: TAST.Class
 simpleClassTAST =
   TAST.Class
-    Core.Public
-    "SimpleClass"
-    "java/lang/Object"
-    [ TAST.Field Core.Private False Core.Int "number" Nothing,
-      TAST.Field Core.Public True Core.Bool "flag" (Just (TAST.Literal Core.Bool (TAST.BoolLit False)))
-    ]
-    [ TAST.Method
-        Core.Public
-        Core.Int
-        False
-        "SimpleClass"
-        [(Core.Int, "initialNumber")]
-        ( TAST.Block
-            [ TAST.StmtOrExprAsStmt
-                (TAST.Assign Nothing "number" (TAST.Name Core.Int "initialNumber")),
-              TAST.StmtOrExprAsStmt
-                ( TAST.Assign
-                    Nothing
-                    "number"
-                    (TAST.Literal Core.Int (TAST.IntLit (0 - 690000)))
-                )
-            ]
-        ),
-      TAST.Method
-        Core.Public
-        Core.Int
-        False
-        "getNumber"
-        []
-        ( TAST.Block
-            [ TAST.Return (Just (TAST.Name Core.Int "number"))
-            ]
-        ),
-      TAST.Method
-        Core.Public
-        Core.Void
-        True
-        "setFlag"
-        [(Core.Bool, "newFlag")]
-        ( TAST.Block
-            [ TAST.StmtOrExprAsStmt (TAST.Assign Nothing "flag" (TAST.Name Core.Bool "newFlag"))
-            ]
-        )
-    ]
-
-complexClassTAST :: TAST.Class
-complexClassTAST =
-  TAST.Class
-    Core.Public
-    "Complex"
-    "java/lang/Object"
-    [ TAST.Field Core.Private False Core.Int "value" Nothing,
-      TAST.Field Core.Public True Core.Bool "status" (Just (TAST.Literal Core.Bool (TAST.BoolLit False)))
-    ]
-    [ TAST.Method
-        Core.Public
-        Core.Void
-        False
-        "Complex"
-        [(Core.Int, "initialValue")]
-        ( TAST.Block
-            [ TAST.LocalVarDecl Core.Int "initialValue" Nothing,
-              TAST.StmtOrExprAsStmt
-                ( TAST.LocalAssign
-                    "value"
-                    ( TAST.MethodCall
-                        (TAST.This Core.Int)
-                        "Complex"
-                        "increaseByTwo"
-                        [(Core.Int, TAST.LocalVar Core.Int "initialValue")]
-                    )
-                )
-            ]
-        ),
-      TAST.Method
-        Core.Private
-        Core.Int
-        False
-        "increaseByTwo"
-        [(Core.Int, "num")]
-        ( TAST.Block
-            [ TAST.Return
-                ( Just
-                    ( TAST.Binary
-                        Core.Int
-                        Core.Add
-                        (TAST.LocalVar Core.Int "num")
-                        (TAST.Literal Core.Int (TAST.IntLit 2))
-                    )
-                )
-            ]
-        ),
-      TAST.Method
-        Core.Public
-        Core.Int
-        False
-        "getValue"
-        []
-        ( TAST.Block
-            [ TAST.Return (Just (TAST.LocalVar Core.Int "value"))
-            ]
-        ),
-      TAST.Method
-        Core.Public
-        Core.Void
-        False
-        "updateValue"
-        [(Core.Int, "additionalValue")]
-        ( TAST.Block
-            [ TAST.LocalVarDecl Core.Int "additionalValue" Nothing,
-              TAST.StmtOrExprAsStmt
-                ( TAST.LocalAssign
-                    "value"
-                    ( TAST.Binary
-                        Core.Int
-                        Core.Add
-                        ( TAST.MethodCall
-                            (TAST.This Core.Int)
-                            "Complex"
-                            "increaseByTwo"
-                            [(Core.Int, TAST.LocalVar Core.Int "additionalValue")]
-                        )
-                        ( TAST.MethodCall
-                            (TAST.This Core.Int)
-                            "Complex"
-                            "getValue"
-                            []
-                        )
-                    )
-                )
-            ]
-        ),
-      TAST.Method
-        Core.Public
-        Core.Void
-        True
-        "setStatus"
-        [(Core.Bool, "newStatus")]
-        ( TAST.Block
-            [ TAST.LocalVarDecl Core.Bool "newStatus" Nothing,
-              TAST.StmtOrExprAsStmt
-                (TAST.LocalAssign "status" (TAST.LocalVar Core.Bool "newStatus"))
-            ]
-        ),
-      TAST.Method
-        Core.Public
-        Core.Bool
-        True
-        "getStatus"
-        []
-        ( TAST.Block
-            [ TAST.Return (Just (TAST.LocalVar Core.Bool "status"))
-            ]
-        )
-    ]
+    { TAST.caccess = Core.Public,
+      TAST.cname = "SimpleClass",
+      TAST.cextends = "", -- Java SimpleClass does not extend another class
+      TAST.cfields =
+        [ TAST.Field Core.Private False Core.Int "number" Nothing,
+          TAST.Field Core.Private True Core.Bool "flag" Nothing
+        ],
+      TAST.cmethods =
+        [ TAST.Method
+            Core.Public
+            (Core.Instance "SimpleClass")
+            False
+            "SimpleClass"
+            [(Core.Int, "initialNumber")]
+            (TAST.Block [TAST.LocalVarDecl Core.Int "number" (Just (TAST.Literal Core.Int (TAST.IntLit 8999999)))]),
+          TAST.Method
+            Core.Public
+            Core.Int
+            False
+            "getNumber"
+            []
+            (TAST.Return (Just (TAST.FieldAccess Core.Int (TAST.This (Core.Instance "SimpleClass")) "SimpleClass" "number"))),
+          TAST.Method
+            Core.Public
+            Core.Void
+            True
+            "setFlag"
+            [(Core.Bool, "newFlag")]
+            (TAST.Block [TAST.LocalVarDecl Core.Void "flag" (Just (TAST.LocalVar Core.Bool "newFlag"))])
+        ]
+    }
 
 main :: IO ()
 main = do
