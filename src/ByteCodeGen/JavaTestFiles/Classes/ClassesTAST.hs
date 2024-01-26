@@ -8,7 +8,8 @@ classes = [
     Types.TAST.Class {
         caccess = Public, 
         cname = "ClassA", 
-        cextends = Nothing, 
+        cextends = Nothing,
+        cconstructors = [], 
         cfields = [
             Field {
                 faccess = Types.Core.Package, 
@@ -26,7 +27,8 @@ classes = [
                 mname = "ClassA",
                 mparams = [], 
                 mbody = Block [
-                    StmtOrExprAsStmt (FieldAssign 
+                    StmtOrExprAsStmt (FieldAssign
+                    Types.Core.Int 
                     (This (Instance "ClassA")) 
                     "ClassA"
                     False
@@ -73,6 +75,7 @@ classes = [
         cname = "ClassB",
         cextends = Nothing,
         cfields = [],
+        cconstructors = [], 
         cmethods = [ 
             Method { 
                 maccess = Public,
@@ -82,17 +85,17 @@ classes = [
                 mparams = [(StringArr, "args")],
                 mbody = Block [ 
                     LocalVarDecl Types.Core.Int "a" (Just (
-                        StmtOrExprAsExpr Types.Core.Int (MethodCall (ClassRef (Types.Core.Class "ClassA") "ClassA") "ClassA" True "staticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5)), (Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
+                        StmtOrExprAsExpr (MethodCall Types.Core.Int (ClassRef (Types.Core.Class "ClassA") "ClassA") "ClassA" True "staticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5)), (Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
                     )), 
-                    LocalVarDecl (Instance "ClassA") "classAInstance" (Just (StmtOrExprAsExpr (Types.Core.Instance "ClassA") (New "ClassA" []))),
+                    LocalVarDecl (Instance "ClassA") "classAInstance" (Just (StmtOrExprAsExpr (New (Types.Core.Instance "ClassA") "ClassA" []))),
                     LocalVarDecl Types.Core.Int "b" (Just (
-                        StmtOrExprAsExpr Types.Core.Int (MethodCall (LocalVar (Instance "ClassA") "classAInstance") "ClassA" False "nonStaticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
+                        StmtOrExprAsExpr (MethodCall Types.Core.Int (LocalVar (Instance "ClassA") "classAInstance") "ClassA" False "nonStaticMethod" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
                     )), 
                     StmtOrExprAsStmt (
-                        MethodCall (ClassRef (Types.Core.Class "System.out") "System.out") "System.out" False "println" [(Types.Core.Int, LocalVar Types.Core.Int "a")]
+                        MethodCall Types.Core.Void (ClassRef (Types.Core.Class "System.out") "System.out") "System.out" False "println" [(Types.Core.Int, LocalVar Types.Core.Int "a")]
                     ), 
                     StmtOrExprAsStmt (
-                        MethodCall (ClassRef (Types.Core.Class "System.out") "System.out") "System.out" False "println" [(Types.Core.Int, LocalVar Types.Core.Int "b")]
+                        MethodCall Types.Core.Void (ClassRef (Types.Core.Class "System.out") "System.out") "System.out" False "println" [(Types.Core.Int, LocalVar Types.Core.Int "b")]
                     )
                 ]
             }

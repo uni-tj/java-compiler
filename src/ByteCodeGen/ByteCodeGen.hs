@@ -32,90 +32,56 @@ import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST (classes)
 -- Remove negativ numbers
 -- Remove consturctor code
 
-codeGen :: [Method_Info]
+codeGen :: [ClassFile]
 codeGen = do
-  let methodObjects = concatMap createClassFile classes
+  let classFileObjects = map createClassFile classes
 
-  methodObjects
+  classFileObjects
 
-
-createClassFile :: Class -> [Method_Info]
+createClassFile :: Class -> ClassFile
 createClassFile classInfo = do
   let cName = getNameFromClass classInfo
-
   let methods = getMethodsFromClass classInfo
+  let constructors = getConstructorsFromClass classInfo
+
   let methodObjects = map (\method -> createMethodObject (cName, method)) methods
+  let constructorObjects = map (\constructor -> createConstructorObject (cName, constructor)) constructors
 
-  methodObjects
+  let classFileNew = ClassFile {
+    magic = Magic,
+    minver = MinorVersion {numMinVer = 0},
+    maxver = MajorVersion {numMaxVer = 49},
+    count_cp = 333,
+    array_cp =
+      [
 
-  -- let classFileNew = ClassFile {
-  --   magic = Magic,
-  --   minver = MinorVersion {numMinVer = 0},
-  --   maxver = MajorVersion {numMaxVer = 49},
-  --   count_cp = 12,
-  --   array_cp =
-  --     [ MethodRef_Info {tag_cp = TagMethodRef, index_name_cp = 2, index_nameandtype_cp = 3, desc = ""},
-  --       Class_Info {tag_cp = TagClass, index_cp = 4, desc = ""},
-  --       NameAndType_Info {tag_cp = TagNameAndType, index_name_cp = 5, index_descr_cp = 6, desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 16, cad_cp = "java/lang/Object", desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 6, cad_cp = "<init>", desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 3, cad_cp = "()V", desc = ""},
-  --       Class_Info {tag_cp = TagClass, index_cp = 8, desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 18, cad_cp = "simpleforLoopClass", desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 4, cad_cp = "Code", desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 13, cad_cp = "simpleForLoop", desc = ""},
-  --       Utf8_Info {tag_cp = TagUtf8, tam_cp = 13, cad_cp = "StackMapTable", desc = ""}
-  --     ],
-  --   -- TODO:
-  --   acfg = AccessFlags [1, 32],
-  --   this = ThisClass {index_th = 8},
-  --   super = SuperClass {index_sp = 2},
-  --   --
-  --   count_interfaces = 0,
-  --   array_interfaces = [],
-  --   count_fields = 0,
-  --   array_fields = [],
-  --   -- Todo:
-  --   count_methods = 1,
-  --   --
-  --   array_methods =
-  --     [
-  --       -- Method_Info
-  --       --   { -- af_mi = AccessFlags [],
-  --       --     -- index_name_mi = ,
-  --       --     -- index_descr_mi = ,
-  --       --     tam_mi = 1,
-  --       --     array_attr_mi =
-  --       --       [ AttributeCode
-  --       --           { -- index_name_attr = , -- Code - Type from const pool
-  --       --             -- tam_len_attr = , -- tam_code_attr + 12
-  --       --             -- len_stack_attr = ,
-  --       --             -- len_local_attr = , -- parameter + this if not static
-  --       --             -- tam_code_attr = , -- code length -> len(array_code_attr)
-  --       --             array_code_attr =
-  --       --               [],
-  --       --             tam_ex_attr = 0,
-  --       --             array_ex_attr = [],
-  --       --             tam_atrr_attr = 0,
-  --       --             array_attr_attr = []
-  --       --           }
-  --       --       ]
-  --       --   }
-  --     ],
-  --   count_attributes = 0,
-  --   array_attributes = []
-  -- }
+      ],
+    -- TODO:
+    acfg = AccessFlags [1, 32],
+    this = ThisClass {index_th = 8},
+    super = SuperClass {index_sp = 2},
+    --
+    count_interfaces = 0,
+    array_interfaces = [],
+    count_fields = 0,
+    array_fields = [],
 
-  -- print "End"
+    count_methods = length constructorObjects + length methodObjects,
+    array_methods = constructorObjects ++ methodObjects,
+
+    count_attributes = 0,
+    array_attributes = []
+  }
+
+  classFileNew
 
 createMethodObject:: (String, Method) -> Method_Info
 createMethodObject (cName, Method methodAccess mtype methodStatic mName methodParams methodBody) = do
   let accessFlags = getAccessFlagsForMethod (methodAccess, methodStatic)
   let indexMethodName = 0 -- Todo: Query CP
   let indexDescr = 0 -- Todo: Query CP
-  let methodConstructor = cName == mName
   
-  let attributeCode = createAttributeCode (methodConstructor, methodStatic, methodParams, methodBody)
+  let attributeCode = createAttributeCode (methodStatic, methodParams, methodBody)
   
   Method_Info {
     af_mi = AccessFlags accessFlags,
@@ -128,16 +94,31 @@ createMethodObject (cName, Method methodAccess mtype methodStatic mName methodPa
       ]
   }
 
-createAttributeCode :: (Bool, Bool, [(Type, LocalName)], Stmt) -> Attribute_Info
-createAttributeCode (methodConstructor, methodStatic, params, body) = do
+createConstructorObject:: (String, Constructor) -> Method_Info
+createConstructorObject (cName, Constructor crAccess crParams crBody) = do
+  let accessFlags = getAccessFlagsForMethod (crAccess, False)
+  let indexMethodName = 0 -- Todo: Query CP
+  let indexDescr = 0 -- Todo: Query CP
+  
+  let attributeCode = createAttributeCode (False, crParams, crBody)
+  
+  Method_Info {
+    af_mi = AccessFlags accessFlags,
+    index_name_mi = indexMethodName,
+    index_descr_mi = indexDescr,
+    tam_mi = 1,
+    array_attr_mi =
+      [
+        attributeCode
+      ]
+  }  
+
+createAttributeCode :: (Bool, [(Type, LocalName)], Stmt) -> Attribute_Info
+createAttributeCode (methodStatic, params, body) = do
   let indexNameAttr = 1 -- Query CP for Code
 
   let localVarArr = localVarGen (methodStatic, params, body)
   let methodCode = codeGenStmt (body, localVarArr)
-
-  -- Todo: Query CP for MethodRef_Info -> java/lang/Object ... -> Is this always this case?
-  -- Can be deleted?
-  let constructorCode = if methodConstructor then [42, 183,333,333] else [] 
 
   AttributeCode {
     index_name_attr = indexNameAttr, -- Code
@@ -145,7 +126,7 @@ createAttributeCode (methodConstructor, methodStatic, params, body) = do
     len_stack_attr = 0, -- Todo: Calc max stack
     len_local_attr = length params + if methodStatic then 0 else 1,
     tam_code_attr = length methodCode,
-    array_code_attr = constructorCode ++ methodCode,
+    array_code_attr = methodCode,
     tam_ex_attr = 0,
     array_ex_attr = [],
     tam_atrr_attr = 0,
@@ -237,11 +218,19 @@ codeGenStmt (If expr stmt mStmt, localVarArr) =
     codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3) ++ codeStmt
 
 -- Todo: What to do?
-codeGenStmt (ThisCall className paras, localVarArr) = []
+codeGenStmt (ThisCall className paras, localVarArr) = do
+  let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
 
-codeGenStmt (SuperCall className paras, localVarArr) = []
+  codeParas ++ [183, 333, 333] -- Query cp
 
-codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
+codeGenStmt (SuperCall className paras, localVarArr) = do
+  let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
+
+  codeParas ++ [183, 333, 333] -- Query cp
+
+codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr) = do
+  let (codeStmtOrExpr, t) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
+  codeStmtOrExpr
 
 codeGenExpr :: (Expr, LocalVarArrType) -> ([Int], Type)
 codeGenExpr (This thisType, localVarArr) = ([42], thisType) -- Aload_0
@@ -288,49 +277,49 @@ codeGenExpr (Literal literalType literal, localVarArr) = do
     Types.Core.Char -> (codeGenLiteral literal, literalType)
     _ -> ([], NullType)
 
-codeGenExpr (StmtOrExprAsExpr stmtOrExprAsExprType stmtOrExpr, localVarArr) = (codeGenStmtOrExpr (stmtOrExpr, localVarArr), stmtOrExprAsExprType)
+codeGenExpr (StmtOrExprAsExpr stmtOrExpr, localVarArr) = codeGenStmtOrExpr (stmtOrExpr, localVarArr)
 
-codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> [Int]
+codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType) -> ([Int], Types.Core.Type)
 
-codeGenStmtOrExpr (LocalAssign varName expr, localVarArr) = do
+codeGenStmtOrExpr (LocalAssign varType varName expr, localVarArr) = do
   let (exprCode, t) = codeGenExpr (expr, localVarArr)
   
   let i = findIndex ((== varName) . fst) localVarArr
   case i of
     Just index ->
-      let codeStore = case t of
+      let codeStore = case varType of
             Types.Core.Int -> [196, 54]
             Types.Core.Bool -> [196, 54]
             Types.Core.Char -> [196, 54]
             Types.Core.Instance instanceName -> [196, 58]
             Types.Core.Class className -> error "Can assign Class to var"
             _ -> []
-      in exprCode ++ codeStore ++ splitLenInTwoBytes index
-    Nothing -> []
+      in (exprCode ++ codeStore ++ splitLenInTwoBytes index, varType)
+    Nothing -> ([], NullType)
 
-codeGenStmtOrExpr (FieldAssign tagetExpr className static fieldName valueExpr, localVarArr) = do
+codeGenStmtOrExpr (FieldAssign varType tagetExpr className static fieldName valueExpr, localVarArr) = do
   let (tagetExprCode, t) = codeGenExpr (tagetExpr, localVarArr)
   let (valueExprCode, t) = codeGenExpr (valueExpr, localVarArr)
 
   if static then
-    tagetExprCode ++ valueExprCode ++ [179,333,333] -- putstatic -- Todo: Query CP of FieldRef_Info
+    (tagetExprCode ++ valueExprCode ++ [179,333,333], varType) -- putstatic -- Todo: Query CP of FieldRef_Info
   else
-    tagetExprCode ++ valueExprCode ++ [181,333,333] -- putfield -- Todo: Query CP of FieldRef_Info
+    (tagetExprCode ++ valueExprCode ++ [181,333,333], varType) -- putfield -- Todo: Query CP of FieldRef_Info
 
-codeGenStmtOrExpr (New className exprs, localVarArr) = do
+codeGenStmtOrExpr (New newType className exprs, localVarArr) = do
   let newCode = [187, 333, 333] ++ [89]{-Dup-} ++ [183, 333, 333] -- Todo: Query CP for Class_Info/MethodRef_Info -> Call constructor
   let paraCode = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) exprs
   
-  paraCode ++ newCode
+  (paraCode ++ newCode, newType)
 
-codeGenStmtOrExpr (MethodCall expr className static methodName paras, localVarArr) = do
+codeGenStmtOrExpr (MethodCall methodType expr className static methodName paras, localVarArr) = do
   let (codeExpr, t) = codeGenExpr (expr, localVarArr)
 
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr))) paras
 
   let codeInvoke = if static then [184, 333, 333] else [182, 333, 333] -- Todo: Query CP for MethodRef_Info
   
-  codeExpr ++ codeParas ++ codeInvoke
+  (codeExpr ++ codeParas ++ codeInvoke, methodType)
 
 codeGenBinOperator:: BinOperator -> [Int]
 codeGenBinOperator Add = [96]
@@ -363,6 +352,9 @@ splitLenInTwoBytes len = [highByte, lowByte]
   where
     highByte = (len `shiftR` 8) .&. 0xFF
     lowByte = len .&. 0xFF
+
+getConstructorsFromClass :: Types.TAST.Class -> [Constructor]
+getConstructorsFromClass = cconstructors
 
 getMethodsFromClass :: Types.TAST.Class -> [Method]
 getMethodsFromClass = cmethods
