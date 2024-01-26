@@ -9,12 +9,13 @@ type Program = [Class]
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
-  { caccess  :: AccessModifier
-  , cname    :: ClassName
+  { caccess       :: AccessModifier
+  , cname         :: ClassName
   -- not required
-  , cextends :: Maybe ClassName
-  , cfields  :: [Field]
-  , cmethods :: [Method]
+  , cextends      :: Maybe ClassName
+  , cfields       :: [Field]
+  , cmethods      :: [Method]
+  , cconstructors :: [Constructor]
   }
   deriving (Show, Eq, Ord)
 
@@ -35,6 +36,12 @@ data Method = Method
   , mbody   :: Stmt
   }
   deriving (Show, Eq, Ord)
+data Constructor = Constructor
+  { craccess :: AccessModifier
+  , crparams :: [(Type, LocalName)]
+  , crbody   :: Stmt
+  }
+  deriving (Show, Eq, Ord)
 
 {- DISCUSSION: remove types from statements or how to interpret type of statements? -}
 data Stmt
@@ -49,10 +56,10 @@ data Stmt
   deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = LocalAssign LocalName Expr
-  | FieldAssign Expr ClassName {-static::-}Bool FieldName Expr
-  | New ClassName [(Type, Expr)]
-  | MethodCall Expr ClassName {-static::-}Bool MethodName [(Type, Expr)]
+  = LocalAssign Type LocalName Expr
+  | FieldAssign Type Expr ClassName {-static::-}Bool FieldName Expr
+  | New Type ClassName [(Type, Expr)]
+  | MethodCall Type Expr ClassName {-static::-}Bool MethodName [(Type, Expr)]
   deriving (Show, Eq, Ord)
 
 data Expr
@@ -64,7 +71,7 @@ data Expr
   | Unary Type UnOparator Expr
   | Binary Type BinOperator Expr Expr
   | Literal Type Literal
-  | StmtOrExprAsExpr Type StmtOrExpr
+  | StmtOrExprAsExpr StmtOrExpr
   deriving (Show, Eq, Ord)
 data Literal
   = IntLit Integer
