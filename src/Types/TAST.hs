@@ -9,12 +9,13 @@ type Program = [Class]
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
-  { caccess  :: AccessModifier
-  , cname    :: ClassName
+  { caccess       :: AccessModifier
+  , cname         :: ClassName
   -- not required
-  , cextends :: ClassName
-  , cfields  :: [Field]
-  , cmethods :: [Method]
+  , cextends      :: Maybe ClassName
+  , cfields       :: [Field]
+  , cmethods      :: [Method]
+  , cconstructors :: [Constructor]
   }
   deriving (Show, Eq, Ord)
 
@@ -35,6 +36,12 @@ data Method = Method
   , mbody   :: Stmt
   }
   deriving (Show, Eq, Ord)
+data Constructor = Constructor
+  { craccess :: AccessModifier
+  , crparams :: [(Type, LocalName)]
+  , crbody   :: Stmt
+  }
+  deriving (Show, Eq, Ord)
 
 {- DISCUSSION: remove types from statements or how to interpret type of statements? -}
 data Stmt
@@ -43,14 +50,16 @@ data Stmt
   | While Expr Stmt
   | LocalVarDecl Type LocalName (Maybe Expr)
   | If Expr Stmt (Maybe Stmt)
+  | ThisCall ClassName [(Type, Expr)]
+  | SuperCall ClassName [(Type, Expr)]
   | StmtOrExprAsStmt StmtOrExpr
   deriving (Show, Eq, Ord)
 
 data StmtOrExpr
-  = LocalAssign LocalName Expr
-  | FieldAssign Expr ClassName FieldName Expr
-  | New ClassName [(Type, Expr)]
-  | MethodCall Expr ClassName MethodName [(Type, Expr)]
+  = LocalAssign Type LocalName Expr
+  | FieldAssign Type Expr ClassName {-static::-}Bool FieldName Expr
+  | New Type ClassName [(Type, Expr)]
+  | MethodCall Type Expr ClassName {-static::-}Bool MethodName [(Type, Expr)]
   deriving (Show, Eq, Ord)
 
 data Expr
@@ -58,11 +67,11 @@ data Expr
   | Super Type
   | LocalVar Type LocalName
   | ClassRef Type ClassName
-  | FieldAccess Type Expr ClassName FieldName
+  | FieldAccess Type Expr ClassName {-static::-}Bool FieldName
   | Unary Type UnOparator Expr
   | Binary Type BinOperator Expr Expr
   | Literal Type Literal
-  | StmtOrExprAsExpr Type StmtOrExpr
+  | StmtOrExprAsExpr StmtOrExpr
   deriving (Show, Eq, Ord)
 data Literal
   = IntLit Integer

@@ -1,5 +1,13 @@
 # Documentation
 
+What goes here:
+
+- How to view each one's code seperately
+- ideas of algorithms and what happens where
+- how to run code/tests
+- features
+- per person ~1 page
+
 ## AST
 
 The AST contains more information than the spec requires.
@@ -11,7 +19,7 @@ Todos:
 
 - check variable redeclarations (in nested blocks)
 - add missing constructor
-- simplify lookupMethod call to only require class name
+- this and super calls, can only appear in constructors as first statement
 - position errors?
 
 Features:

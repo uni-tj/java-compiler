@@ -9,12 +9,13 @@ type Program = [Class]
 {- Using "record syntax" for better readability and extensibility
 -}
 data Class = Class
-  { caccess  :: AccessModifier
-  , cname    :: ClassName
+  { caccess       :: AccessModifier
+  , cname         :: ClassName
   -- not required
-  , cextends :: Maybe ClassName
-  , cfields  :: [Field]
-  , cmethods :: [Method]
+  , cextends      :: Maybe ClassName
+  , cfields       :: [Field]
+  , cmethods      :: [Method]
+  , cconstructors :: [Constructor]
   }
   deriving (Show, Eq, Ord)
 
@@ -37,6 +38,13 @@ data Method = Method
   , mbody     :: Stmt
   }
   deriving (Show, Eq, Ord)
+data Constructor = Constructor
+  { craccess :: AccessModifier
+  , crname   :: ClassName -- only for convenience
+  , crparams :: [(Type, LocalName)]
+  , crbody   :: Stmt
+  }
+  deriving (Show, Eq, Ord)
 
 data Stmt
   = Block Position [Stmt]
@@ -44,6 +52,8 @@ data Stmt
   | While Position Expr Stmt
   | LocalVarDecl Position Type LocalName (Maybe Expr)
   | If Position Expr Stmt (Maybe Stmt)
+  | ThisCall [Expr]  -- can only appear as first stmt of constructor
+  | SuperCall [Expr] -- can only appear as first stmt of constructor
   | StmtOrExprAsStmt Position StmtOrExpr
   deriving (Show, Eq, Ord)
 
