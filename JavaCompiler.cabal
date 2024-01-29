@@ -20,10 +20,12 @@ source-repository head
 
 library
   exposed-modules:
+      Bytecode.ConstantPool
       ByteCodeGen.ByteCodeGen
       ByteCodeGen.JavaTestFiles.Classes.ClassesTAST
-      ByteCodeGen.Jvm.BinaryClass
-      ByteCodeGen.Jvm.Data.ClassFormat
+      Jvm.BinaryClass
+      Jvm.Data.ClassFormat
+      Jvm.PrettyClass
       Types.AST
       Types.Core
       Types.TAST
@@ -41,6 +43,8 @@ library
     , containers
     , extra >=1.7.13
     , mtl
+    , text
+    , uulib
   default-language: Haskell2010
 
 executable JavaCompiler-exe
@@ -60,6 +64,8 @@ executable JavaCompiler-exe
     , containers
     , extra >=1.7.13
     , mtl
+    , text
+    , uulib
   default-language: Haskell2010
 
 test-suite JavaCompiler-test
@@ -80,4 +86,6 @@ test-suite JavaCompiler-test
     , containers
     , extra >=1.7.13
     , mtl
+    , text
+    , uulib
   default-language: Haskell2010
