@@ -92,7 +92,7 @@ createMethodObject (cName, m@(Method methodAccess mtype methodStatic mName metho
     { af_mi = AccessFlags accessFlags,
       index_name_mi = indexMethodName,
       index_descr_mi = indexDescr,
-      tam_mi = 100,
+      tam_mi = 1,
       array_attr_mi =
         [ attributeCode
         ]
@@ -125,7 +125,8 @@ createAttributeCode (methodStatic, params, body, sf) = do
     { index_name_attr = indexNameAttr, -- Code
       tam_len_attr = length methodCode + 12, -- All bytes below
       len_stack_attr = 1000, -- Todo: Calc max stack
-      len_local_attr = length params + if methodStatic then 0 else 1,
+      len_local_attr = 255, -- length params + if methodStatic then 0 else 1,
+      -- TODO Does not work(Variable Number)
       tam_code_attr = length methodCode,
       array_code_attr = methodCode,
       tam_ex_attr = 0,
