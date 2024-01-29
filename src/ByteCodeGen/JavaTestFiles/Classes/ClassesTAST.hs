@@ -16,10 +16,8 @@ classes =
               { crparams = [],
                 crbody =
                   Block
-                    [ Return
-                        ( Just
-                            (Binary Int Mul (LocalVar Int "a") (LocalVar Int "a"))
-                        )
+                    [ SuperCall "java/lang/Object" [],
+                      Return Nothing
                     ],
                 craccess = Public
               }
@@ -52,10 +50,8 @@ classes =
               { crparams = [],
                 crbody =
                   Block
-                    [ Return
-                        ( Just
-                            (Literal Types.Core.Int (IntLit 5))
-                        )
+                    [ SuperCall "java/lang/Object" [],
+                      Return Nothing
                     ],
                 craccess = Public
               }
@@ -72,7 +68,7 @@ classes =
                     [ LocalVarDecl (Instance "Add") "instance" (Just (StmtOrExprAsExpr (New (Types.Core.Instance "Add") "Add" []))),
                       Return
                         ( Just
-                            ( StmtOrExprAsExpr (MethodCall Types.Core.Int (LocalVar (Instance "Class1") "") "instance" False "add" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
+                            ( StmtOrExprAsExpr (MethodCall Types.Core.Int (LocalVar (Instance "Class1") "") "instance" True "add" [(Types.Core.Int, Literal Types.Core.Int (IntLit 5))])
                             )
                         )
                     ]
