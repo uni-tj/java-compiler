@@ -7,131 +7,189 @@ import Types.TAST
 
 classes :: Program
 classes =
-  [ Types.TAST.Class
-      { caccess = Public,
-        cname = "Add",
-        cextends = Nothing,
-        cfields =
-          [ Field {ftype = Int, fstatic = False, fname = "num", finit = Nothing, faccess = Private}
-          ],
-        cconstructors =
-          [ Constructor
-              { crparams = [],
-                crbody =
-                  Block
-                    [ SuperCall "java/lang/Object" [],
-                      ( StmtOrExprAsStmt
-                          ( FieldAssign
-                              Int
-                              (This (Types.Core.Class "Add"))
-                              "Add"
-                              False
-                              "num"
-                              (Literal Int $ IntLit 20)
+    [ Types.TAST.Class
+        { caccess = Public
+        , cname = "Num"
+        , cextends = Nothing
+        , cfields =
+            [ Field{ftype = Int, fstatic = False, fname = "fnum", finit = Nothing, faccess = Public}
+            ]
+        , cconstructors =
+            [ Constructor
+                { crparams = []
+                , crbody =
+                    Block
+                        [ SuperCall "java/lang/Object" []
+                        , ( StmtOrExprAsStmt
+                                ( FieldAssign
+                                    Int
+                                    (This (Types.Core.Class "Num"))
+                                    "Num"
+                                    False
+                                    "fnum"
+                                    (Literal Int $ IntLit (-10))
+                                )
                           )
-                      ),
-                      Return Nothing
-                    ],
-                craccess = Public
-              }
-          ],
-        cmethods =
-          [ Method
-              { maccess = Public,
-                mtype = Int,
-                mstatic = False,
-                mname = "add",
-                mparams = [(Int, "a"), (Int, "b")],
-                mbody =
-                  Block
-                    [ ( Return
-                          ( Just
-                              ( Binary
-                                  Int
-                                  Mul
-                                  (FieldAccess Int (This (Types.Core.Class "Add")) "Add" False "num")
-                                  (Binary Int Mul (LocalVar Int "a") (LocalVar Int "b"))
-                              )
+                        , Return Nothing
+                        ]
+                , craccess = Public
+                }
+            ]
+        , cmethods =
+            [ Method
+                { maccess = Public
+                , mtype = Int
+                , mstatic = False
+                , mname = "add2"
+                , mparams = [(Int, "a"), (Int, "b")]
+                , mbody =
+                    Block
+                        [ ( Return
+                                ( Just
+                                    ( Binary
+                                        Int
+                                        Add
+                                        (FieldAccess Int (This (Types.Core.Class "Num")) "Num" False "fnum")
+                                        (Binary Int Mul (LocalVar Int "a") (LocalVar Int "b"))
+                                    )
+                                )
                           )
-                      )
-                    ]
-              }
-          ]
-      },
-    Types.TAST.Class
-      { caccess = Public,
-        cname = "ggt",
-        cextends = Nothing,
-        cfields =
-          [ Field {ftype = Int, fstatic = True, fname = "i", finit = Nothing, faccess = Private}
-          ],
-        cconstructors =
-          [ Constructor
-              { crparams = [],
-                crbody =
-                  Block
-                    [ SuperCall "java/lang/Object" [],
-                      StmtOrExprAsStmt
-                        ( FieldAssign
-                            Int
-                            (This (Types.Core.Class "ggt"))
-                            "ggt"
-                            True
-                            "i"
-                            (Literal Int $ IntLit 80)
-                        ),
-                      Return
-                        Nothing
-                    ],
-                craccess = Public
-              }
-          ],
-        cmethods =
-          [ Method
-              { maccess = Public,
-                mtype = Int,
-                mstatic = True,
-                mname = "ggT",
-                mparams = [(Int, "a"), (Int, "b")],
-                mbody =
-                  Block
-                    [ LocalVarDecl (Instance "Add") "instance" (Just (StmtOrExprAsExpr (New (Types.Core.Instance "Add") "Add" []))),
-                      ( StmtOrExprAsStmt
-                          ( FieldAssign
-                              Int
-                              (ClassRef (Types.Core.Class "ggt") "ggt")
-                              "ggt"
-                              True
-                              "i"
-                              (Literal Int $ IntLit 20)
-                          )
-                      ),
-                      -- Return $ Just $ (Literal Int $ IntLit 20)
-                      Return
-                        ( Just
-                            -- (LocalVar (Instance "Add") "instance")
-                            -- (Literal Int (IntLit 5))
-                            -- (FieldAccess Int (ClassRef (Types.Core.Class "ggt") "ggt") "ggt" True "i")
-                            ( StmtOrExprAsExpr
-                                ( MethodCall
-                                    Types.Core.Int
-                                    (LocalVar (Instance "Add") "instance")
+                        ]
+                }
+            ]
+        }
+    , Types.TAST.Class
+        { caccess = Public
+        , cname = "Add"
+        , cextends = Just ("Num")
+        , cfields =
+            [ Field{ftype = Int, fstatic = False, fname = "num", finit = Nothing, faccess = Private}
+            ]
+        , cconstructors =
+            [ Constructor
+                { crparams = []
+                , crbody =
+                    Block
+                        [ SuperCall "Num" []
+                        , ( StmtOrExprAsStmt
+                                ( FieldAssign
+                                    Int
+                                    (This (Types.Core.Class "Add"))
                                     "Add"
                                     False
-                                    "add"
-                                    [ (Types.Core.Int, Literal Types.Core.Int (IntLit 5)),
-                                      ( Types.Core.Int,
-                                        (FieldAccess Int (ClassRef (Types.Core.Class "ggt") "ggt") "ggt" True "i")
-                                      )
-                                    ]
+                                    "num"
+                                    (Literal Int $ IntLit 20)
+                                )
+                          )
+                        , Return Nothing
+                        ]
+                , craccess = Public
+                }
+            ]
+        , cmethods =
+            [ Method
+                { maccess = Public
+                , mtype = Int
+                , mstatic = False
+                , mname = "add"
+                , mparams = [(Int, "a"), (Int, "b")]
+                , mbody =
+                    Block
+                        [ ( Return
+                                ( Just
+                                    ( Binary
+                                        Int
+                                        Mul
+                                        (FieldAccess Int (This (Types.Core.Class "Add")) "Add" False "num")
+                                        (FieldAccess Int (This (Types.Core.Class "Add")) "Num" False "fnum")
+                                    )
+                                )
+                          )
+                        ]
+                }
+            ]
+        }
+    , Types.TAST.Class
+        { caccess = Public
+        , cname = "ggt"
+        , cextends = Nothing
+        , cfields =
+            [ Field{ftype = Int, fstatic = True, fname = "i", finit = Nothing, faccess = Private}
+            ]
+        , cconstructors =
+            [ Constructor
+                { crparams = []
+                , crbody =
+                    Block
+                        [ SuperCall "java/lang/Object" []
+                        , StmtOrExprAsStmt
+                            ( FieldAssign
+                                Int
+                                (This (Types.Core.Class "ggt"))
+                                "ggt"
+                                True
+                                "i"
+                                (Literal Int $ IntLit 80)
+                            )
+                        , Return
+                            Nothing
+                        ]
+                , craccess = Public
+                }
+            ]
+        , cmethods =
+            [ Method
+                { maccess = Public
+                , mtype = Int
+                , mstatic = True
+                , mname = "ggT"
+                , mparams = [(Int, "a"), (Int, "b")]
+                , mbody =
+                    Block
+                        [ LocalVarDecl (Instance "Add") "instance" (Just (StmtOrExprAsExpr (New (Types.Core.Instance "Add") "Add" [])))
+                        , ( StmtOrExprAsStmt
+                                ( FieldAssign
+                                    Int
+                                    (ClassRef (Types.Core.Class "ggt") "ggt")
+                                    "ggt"
+                                    True
+                                    "i"
+                                    (Literal Int $ IntLit 20)
+                                )
+                          )
+                        , -- Return $ Just $ (Literal Int $ IntLit 20)
+                          Return
+                            ( Just
+                                -- (LocalVar (Instance "Add") "instance")
+                                -- (Literal Int (IntLit 5))
+                                -- (FieldAccess Int (ClassRef (Types.Core.Class "ggt") "ggt") "ggt" True "i")
+                                ( ( Binary
+                                        Int
+                                        Add
+                                        (FieldAccess Int (LocalVar (Instance "Num") "instance") "Add" False "fnum")
+                                        ( StmtOrExprAsExpr
+                                            ( MethodCall
+                                                Types.Core.Int
+                                                (LocalVar (Instance "Add") "instance")
+                                                "Add"
+                                                False
+                                                "add"
+                                                [ (Types.Core.Int, Literal Types.Core.Int (IntLit 5))
+                                                ,
+                                                    ( Types.Core.Int
+                                                    , (FieldAccess Int (ClassRef (Types.Core.Class "ggt") "ggt") "ggt" True "i")
+                                                    )
+                                                ]
+                                            )
+                                        )
+                                  )
                                 )
                             )
-                        )
-                    ]
-              }
-          ]
-      }
-  ]
+                        ]
+                }
+            ]
+        }
+    ]
 
 {- classes :: Program
 classes =
