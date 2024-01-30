@@ -1,5 +1,5 @@
 
-module Parser.IndexParser(parser) where
+module Parser.ErrorParser(parser) where
 
 import Types.Core
     ( AccessModifier(Package, Public, Private),
@@ -21,7 +21,7 @@ import Types.AST
       Stmt(..),
       Expr(..),
       StmtOrExpr(..),
-      Literal(..), 
+      Literal(..),
       Constructor(..))
 import Parser.Combinators
     ( (+.+),
@@ -31,7 +31,11 @@ import Parser.Combinators
       posLexemParam,
       succeed,
       (|||),
-      Parser )
+      (+++),
+      (<||>),
+      (<|>),
+      (<$$>),
+      Parser, ParseError, ParserWithError, recon )
 import Scanner.Token
     ( PositionedToken(..),
       Token(IDENTIFIER, EXTENDS, CLASS, STATIC, OVERRIDE, LBRACKET,
@@ -81,8 +85,15 @@ getPosFromExpr expr = case expr of
 parser :: String -> Program
 parser = tokenParser . lexWithIndex
 
-tokenParser :: [PositionedToken] -> Program
-tokenParser input = fst (head (correctSols (parseProgram input)))
+tokenParser :: [PositionedToken] -> Program 
+tokenParser toks = case parseProgram' toks of
+    Right (program, []) -> program
+    Right (_, rest) -> error ("unexpected tokens: " ++ show rest)
+    Left err -> error err
+
+{-----------------------------------------------------------------------------}
+{-- # Error Handling ---------------------------------------------------------}
+{-----------------------------------------------------------------------------}
 
 correctSols :: [(t, [a])] -> [(t, [a])]
 correctSols = filter (\(_, resttokens) -> null resttokens)
@@ -95,6 +106,10 @@ correctSols = filter (\(_, resttokens) -> null resttokens)
 {- 
     Program = e | Class : e
 -}
+
+parseProgram' :: ParserWithError PositionedToken Program
+parseProgram' = (recon STATIC) <$$> const []
+
 
 parseProgram :: Parser PositionedToken Program
 parseProgram = many parseClass
@@ -156,7 +171,7 @@ parseClassEntry =     (parseMethodDecl      <<< ClassMethod)
 
 
 parseConstructorDecl :: Parser PositionedToken Types.AST.Constructor
-parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ 
+parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+
                             posLexem LBRACKET +.+ parseThisOrSuperCall +.+ parseStmts +.+ posLexem RBRACKET)
                             <<< (\(vis, (name, (_, (params, (_, (lB, (thsSupCall, (body, rB))))))))
                                 -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = Block (makePos lB rB) (thsSupCall ++ body)}))
@@ -165,12 +180,12 @@ parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRA
                                 -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = body}))
 
 parseThisOrSuperCall :: Parser PositionedToken  [Stmt]
-parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
-                            <<< \(_, (_, (params, _))) 
+parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
+                            <<< \(_, (_, (params, _)))
                                 -> [ThisCall params])
 
                        ||| ((posLexem SUPER +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
-                            <<< \(_, (_, (params, _))) 
+                            <<< \(_, (_, (params, _)))
                                 -> [SuperCall params])
 
 {-----------------------------------------------------------------------------}
@@ -186,7 +201,7 @@ parseStatic = (posLexem STATIC <<< const True) ||| succeed False
 {-  override annotation, recudes to bool, weather token is present or not
     Override = e | '@Override'
 -}
-parseOverride :: Parser PositionedToken Bool 
+parseOverride :: Parser PositionedToken Bool
 parseOverride = (posLexem OVERRIDE <<< const True) ||| succeed False
 
 {-  method declaration, reduces to Types.AST.Method
@@ -339,7 +354,7 @@ parseThisOrSuperCall =     ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallPara
                             <<< \(super, (_, (params, rb))) -> SuperCall params)
 -}
 
-parseEmptyStmt :: Parser PositionedToken Stmt 
+parseEmptyStmt :: Parser PositionedToken Stmt
 parseEmptyStmt = posLexem SEMICOLON <<< \semicolon -> Block (position semicolon) []
 
 {-----------------------------------------------------------------------------}
