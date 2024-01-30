@@ -73,6 +73,7 @@ data Expr
   | Literal Type Literal
   | StmtOrExprAsExpr StmtOrExpr
   deriving (Show, Eq, Ord)
+  
 data Literal
   = IntLit Integer
   | CharLit Char
