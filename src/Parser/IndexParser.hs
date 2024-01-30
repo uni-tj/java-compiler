@@ -24,8 +24,24 @@ import Types.AST
       Literal(..), 
       Constructor(..))
 import Parser.Combinators
+    ( (+.+),
+      (<<<),
+      many,
+      posLexem,
+      posLexemParam,
+      succeed,
+      (|||),
+      Parser )
 import Scanner.Token
-import Scanner.Lexer
+    ( PositionedToken(..),
+      Token(IDENTIFIER, EXTENDS, CLASS, STATIC, OVERRIDE, LBRACKET,
+            RBRACKET, RETURN, WHILE, IF, ELSE, SEMICOLON, NEW, COMMA, DOT,
+            THIS, SUPER, LBRACE, RBRACE, ASSIGN, EXCLMARK, PLUS, MINUS, MUL,
+            DIV, MOD, AND, OR, LESS, LESSEQUAL, GREATER, GREATEREQUAL, EQUAL,
+            NOTEQUAL, INTLITERAL, CHARLITERAL, BOOLLITERAL, JNULL, CHAR, INT,
+            BOOLEAN, VOID, STRING, LSQRBRACKET, RSQRBRACKET, PUBLIC, PRIVATE,
+            PROTECTED) )
+import Scanner.Lexer ( lexWithIndex )
 
 -- computing the position spanning from position 1 to position 2
 spanPos :: Position -> Position -> Position
@@ -140,10 +156,13 @@ parseClassEntry =     (parseMethodDecl      <<< ClassMethod)
 
 
 parseConstructorDecl :: Parser PositionedToken Types.AST.Constructor
-parseConstructorDecl = (parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ 
-                        posLexem LBRACKET +.+ parseThisOrSuperCall +.+ parseStmts +.+ posLexem RBRACKET)
-                        <<< (\(vis, (name, (_, (params, (_, (lB, (thsSupCall, (body, rB))))))))
-                            -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = Block (makePos lB rB) (thsSupCall ++ body)})
+parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ 
+                            posLexem LBRACKET +.+ parseThisOrSuperCall +.+ parseStmts +.+ posLexem RBRACKET)
+                            <<< (\(vis, (name, (_, (params, (_, (lB, (thsSupCall, (body, rB))))))))
+                                -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = Block (makePos lB rB) (thsSupCall ++ body)}))
+                      ||| ((parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ parseBlock)
+                            <<< (\(vis, (name, (_, (params, (_, body)))))
+                                -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = body}))
 
 parseThisOrSuperCall :: Parser PositionedToken  [Stmt]
 parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
