@@ -20,9 +20,9 @@ source-repository head
 
 library
   exposed-modules:
-      Bytecode.ConstantPool
       ByteCodeGen.ByteCodeGen
       ByteCodeGen.JavaTestFiles.Classes.ClassesTAST
+      ConstantPool.ConstantPool
       Jvm.BinaryClass
       Jvm.Data.ClassFormat
       Jvm.PrettyClass
