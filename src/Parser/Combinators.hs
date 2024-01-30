@@ -24,11 +24,11 @@ satisfy cond (tkn : tkns) | cond tkn  = succeed tkn tkns
 
 
 -- AIO recognition a singular token with error handling and position tracking
-recon :: PositionedToken -> ParserWithError PositionedToken PositionedToken
-recon tkn [] = Left ("unexpected end of Input, expected: " ++ show (token tkn))
-recon tkn (tok : toks)  | equivalent (token tkn) (token tok) = Right (tok, toks)
-                        | otherwise = Left ("unexpected token: " ++ show tok ++ ", expected: " ++ show (token tkn) 
-                                            ++ "at " ++ show (position tkn))
+recon :: Token -> ParserWithError PositionedToken PositionedToken
+recon tkn [] = Left ("unexpected end of Input, expected: " ++ show tkn)
+recon tkn (tok : toks)  | equivalent tkn (token tok) = Right (tok, toks)
+                        | otherwise = Left ("unexpected token: " ++ show tok ++ ", expected: " ++ show tkn 
+                                            ++ "at " ++ show (position tok))
             where
                 equivalent (IDENTIFIER _) (IDENTIFIER _) = True
                 equivalent (INTLITERAL _) (INTLITERAL _) = True
