@@ -100,6 +100,15 @@ infixr +.+, |||
         Right (v2, rest2) -> Right (v2, rest2)
     Right (v1, rest1) -> Right (v1, rest1)
 
+--alternative combinator to use with error handling
+(<|>) :: ParserWithError tok a -> ParserWithError tok a -> ParserWithError tok a
+(p1 <|> p2) toks = case p1 toks of
+    Left err -> case p2 toks of
+        Left err2 -> Left err2 -- might wanna changes this to "or" in the future
+        Right (v2, rest2) -> Left "meta error: base case error not correct"
+    Right (v1, rest1) -> Right (v1, rest1)
+
+
 (<$$>) :: ParserWithError tok a -> (a -> b) -> ParserWithError tok b
 (p <$$> f) toks = case p toks of
     Left err -> Left err
