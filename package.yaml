@@ -50,7 +50,7 @@ executables:
 
 tests:
   JavaCompiler-test:
-    main: Spec.hs
+    main: Test.hs
     source-dirs: test
     ghc-options:
       - -threaded
@@ -58,3 +58,4 @@ tests:
       - -with-rtsopts=-N
     dependencies:
       - JavaCompiler
+      - HUnit
