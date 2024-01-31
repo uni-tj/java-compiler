@@ -52,8 +52,8 @@ data Stmt
   | While Position Expr Stmt
   | LocalVarDecl Position Type LocalName (Maybe Expr)
   | If Position Expr Stmt (Maybe Stmt)
-  | ThisCall [Expr]  -- can only appear as first stmt of constructor
-  | SuperCall [Expr] -- can only appear as first stmt of constructor
+  | ThisCall Position [Expr]  -- can only appear as first stmt of constructor
+  | SuperCall Position [Expr] -- can only appear as first stmt of constructor
   | StmtOrExprAsStmt Position StmtOrExpr
   deriving (Show, Eq, Ord)
 

@@ -26,6 +26,8 @@ library
       Jvm.BinaryClass
       Jvm.Data.ClassFormat
       Jvm.PrettyClass
+      SemanticCheck.Typecheck
+      SemanticCheck.Util
       Types.AST
       Types.Core
       Types.TAST
@@ -42,6 +44,7 @@ library
     , composition-prelude >=3.0.0.0
     , containers
     , extra >=1.7.13
+    , lens >=5.0.0
     , mtl
     , text
     , uulib
@@ -85,6 +88,7 @@ test-suite JavaCompiler-test
     , composition-prelude >=3.0.0.0
     , containers
     , extra >=1.7.13
+    , lens >=5.0.0
     , mtl
     , text
     , uulib
