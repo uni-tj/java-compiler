@@ -12,8 +12,14 @@ type ParserWithError tok a = [tok] -> Either ParseError (a, [tok])
 failure :: Parser a b                       -- Parser der leeren Sprache
 failure _ = []
 
+errorFailure :: String -> ParserWithError a b 
+errorFailure msg _ = Left msg
+
 succeed :: a -> Parser tok a                -- Parser der Sprache des 
 succeed value toks = [(value, toks)]        -- leeren Worts (\epsilon)
+
+succeedE :: a -> ParserWithError tok a
+succeedE value toks = Right (value, toks)
 
 -- conditional recognition
 satisfy :: (tok -> Bool) -> Parser tok tok 
@@ -28,7 +34,7 @@ recon :: Token -> ParserWithError PositionedToken PositionedToken
 recon tkn [] = Left ("unexpected end of Input, expected: " ++ show tkn)
 recon tkn (tok : toks)  | equivalent tkn (token tok) = Right (tok, toks)
                         | otherwise = Left ("unexpected token: " ++ show tok ++ ", expected: " ++ show tkn 
-                                            ++ "at " ++ show (position tok))
+                                            ++ " at " ++ show (position tok))
             where
                 equivalent (IDENTIFIER _) (IDENTIFIER _) = True
                 equivalent (INTLITERAL _) (INTLITERAL _) = True
@@ -96,7 +102,7 @@ infixr +.+, |||
 (<||>) :: ParserWithError tok a -> ParserWithError tok a -> ParserWithError tok a
 (p1 <||> p2) toks = case p1 toks of
     Left err -> case p2 toks of
-        Left err2 -> Left (err ++ " and " ++ err2) -- might wanna changes this to "or" in the future
+        Left err2 -> Left (err ++ " or " ++ err2) -- might wanna changes this to "or" in the future
         Right (v2, rest2) -> Right (v2, rest2)
     Right (v1, rest1) -> Right (v1, rest1)
 
@@ -109,11 +115,14 @@ infixr +.+, |||
     Right (v1, rest1) -> Right (v1, rest1)
 
 
+
 (<$$>) :: ParserWithError tok a -> (a -> b) -> ParserWithError tok b
 (p <$$> f) toks = case p toks of
     Left err -> Left err
     Right (v, rest) -> Right (f v, rest)
+
 infixr +++, <||>
+infixl <|>
 
 
 -- parse zero or n-many times the thing, p parses, and concat to list
@@ -121,3 +130,8 @@ many :: Parser tok a -> Parser tok [a]
 many parser =     (parser <<< (: []))
               ||| ((parser +.+ many parser) <<< uncurry (:))
               ||| succeed []
+
+manyE :: ParserWithError tok a -> ParserWithError tok [a]
+manyE parser =     (parser <$$> (: []))
+              <||> ((parser +++ manyE parser) <$$> uncurry (:))
+              <||> succeedE []
