@@ -8,7 +8,8 @@
 module SemanticCheck.Typecheck(typecheck) where
 
 import           Control.Composition  ((.*))
-import           Control.Lens         (Lens', assign, use, (%%~), (%=), (%~))
+import           Control.Lens         (Lens', assign, use, (%%~), (%=), (%~),
+                                       (.=))
 import           Control.Monad.Except (ExceptT, MonadError (throwError), forM,
                                        join, runExceptT, void, zipWithM)
 import           Control.Monad.Extra  (filterM, findM, forM_, ifM, when,
@@ -142,26 +143,29 @@ stdLib =
   ]
 
 typecheck :: AST.Program -> TAST.Program
-typecheck prg = case flip evalState globalCtx $ runExceptT typecheckM of
+typecheck prg = case flip evalState globalCtx $ runExceptT $ typecheckM prg of
   Left err   -> error err
   Right prg' -> prg'
-  where globalCtx = GlobalCtx { cIasses = prg }
+  where globalCtx = GlobalCtx { cIasses = prg ++ stdLib }
 
-typecheckM :: ExceptState TAST.Program
-typecheckM = precheckProgram >> checkProgram
--- typecheckM = precheckProgram >> return []
--- typecheckM = checkProgram
+typecheckM :: AST.Program -> ExceptState TAST.Program
+typecheckM prg = do
+  prechecked <- precheckProgram prg
+  cIassesL .= prechecked ++ stdLib
+  checkProgram prechecked
 
 {- Prechecks
  - Check invariants that are later needed to not throw errors at the wrong positions
  - Expand AST by libararies and missing constructors that are later expected to exist
+
+ - Prechecks of classes are generally independent from each other,
+ - while checks need information from other classes.
  -}
-precheckProgram :: ExceptState ()
-precheckProgram = do
-  liftBoolM "Classes must have unique names." $
-    hasNoDuplicates <$> AST.cname <$$> gets cIasses
-  use cIassesL >>= mapM precheckClass >>= assign cIassesL
-  cIassesL %= (++ stdLib) -- standard library is not subject to code injection
+precheckProgram :: AST.Program -> ExceptState AST.Program
+precheckProgram prg = do
+  liftBool "Classes must have unique names." $
+    hasNoDuplicates $ AST.cname <$> prg
+  mapM precheckClass prg
 
 precheckClass :: AST.Class -> ExceptState AST.Class
 precheckClass cIass = do
@@ -183,9 +187,12 @@ precheckConstructor cr = do
         -- Used only after checking a block exists
         stmtsL f (AST.Block a b) = f b <&> AST.Block a
 
-checkProgram :: ExceptState TAST.Program
-checkProgram = do
-  mapM checkClass =<< gets cIasses
+checkProgram :: AST.Program -> ExceptState TAST.Program
+checkProgram prg = do
+  -- check again for collisions with stdLib
+  liftBoolM "Classes must have unique names." $
+    hasNoDuplicates <$> AST.cname <$$> gets cIasses
+  mapM checkClass prg
 
 checkClass :: AST.Class -> ExceptState TAST.Class
 checkClass cIass@AST.Class{AST.caccess, AST.cname, AST.cextends, AST.cfields, AST.cmethods, AST.cconstructors} = do
