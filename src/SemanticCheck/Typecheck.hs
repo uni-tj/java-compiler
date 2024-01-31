@@ -5,11 +5,11 @@
 {-# LANGUAGE TupleSections         #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use mapAndUnzipM" #-}
+{-# HLINT ignore "Redundant <$>" #-}
 module SemanticCheck.Typecheck(typecheck) where
 
 import           Control.Composition  ((.*))
-import           Control.Lens         (Lens', assign, use, (%%~), (%=), (%~),
-                                       (.=))
+import           Control.Lens         (Lens', (%%~), (%~), (.=))
 import           Control.Monad.Except (ExceptT, MonadError (throwError), forM,
                                        join, runExceptT, void, zipWithM)
 import           Control.Monad.Extra  (filterM, findM, forM_, ifM, when,
@@ -29,6 +29,7 @@ import           Data.Maybe           (fromJust, fromMaybe, isJust, isNothing,
 import           Data.Tuple.Extra     (swap)
 import           Debug.Trace          (traceShow, traceShowId)
 import           Prelude              hiding (EQ, GT, LT, unzip)
+import qualified SemanticCheck.StdLib as StdLib
 import           SemanticCheck.Util
 import qualified Types.AST            as AST
 import           Types.Core           (AccessModifier (..), BinOperator (..),
@@ -44,6 +45,10 @@ hasNoDuplicates xs = length xs == length (nub xs)
 m1 <<>^ m2 = do
   may1 <- m1
   if isJust may1 then return may1 else m2
+
+infixr 2 |||
+(|||) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+(|||) f1 f2 x = f1 x || f2 x
 
 condM :: Monad m => [(m Bool, m a)] -> m a
 condM []          = error "Non-exhaustive patterns in condM"
@@ -70,7 +75,7 @@ traceShowWith f v = traceShow (f v) v
 -- byName n f cs = applyWhen ((n ==) . name) f <$> cs
 
 cIassesL :: Lens' GlobalCtx [AST.Class]
-cIassesL f (GlobalCtx a) = GlobalCtx <$> f a
+cIassesL f (GlobalCtx a b) = f a <&> \a' -> GlobalCtx a' b
 
 cextendsL :: Lens' AST.Class (Maybe Identifier)
 cextendsL fn (AST.Class a b c d e f) = fn c <&> \c' -> AST.Class a b c' d e f
@@ -79,9 +84,12 @@ cconstructorsL fn (AST.Class a b c d e f) = fn f <&> AST.Class a b c d e
 
 crbodyL :: Lens' AST.Constructor AST.Stmt
 crbodyL f (AST.Constructor a b c d) = flip fmap (f d) $ AST.Constructor a b c
+
+localsL :: Lens' ExprCtx (Map Identifier Type)
+localsL f (Ctx a b c) = f a <&> \a' -> Ctx a' b c
 {- Lens helper end -}
 
-data GlobalCtx = GlobalCtx { cIasses :: [AST.Class] }
+data GlobalCtx = GlobalCtx { cIasses :: [AST.Class], stdLib :: [AST.Class] }
 type ExceptState = ExceptT String (State GlobalCtx)
 
 liftBool :: MonadError e m => e -> Bool -> m ()
@@ -120,38 +128,24 @@ isBlock _           = False
 
 data ExprCtx = Ctx { locals :: Map Identifier Type, cIass :: AST.Class, staticCtx :: Bool}
 instance StaticTag ExprCtx where static = staticCtx
-addLocal :: Type -> Identifier -> ExprCtx -> ExprCtx
-addLocal ltype lname Ctx{locals,cIass,staticCtx} = Ctx{ locals=locals', cIass, staticCtx }
-  where locals' = Map.insert lname ltype locals
 
 dummyPosition :: AST.Position
 dummyPosition  = AST.Position{ AST.start = (0,0), AST.end = (0,0) }
+defSuperCall :: AST.Stmt
+defSuperCall = AST.SuperCall dummyPosition []
 defConstructor :: AST.Class -> AST.Constructor
 defConstructor cIass = AST.Constructor (access cIass) (name cIass) [] $ AST.Block dummyPosition [defSuperCall]
-defSuperCall :: AST.Stmt
-defSuperCall   = AST.SuperCall dummyPosition []
-stdLib :: AST.Program
-stdLib =
-  [ AST.Class
-        { AST.caccess       = Public
-        , AST.cname         = "Object"
-        , AST.cextends      = Nothing
-        , AST.cfields       = []
-        , AST.cmethods      = []
-        , AST.cconstructors = [AST.Constructor Public "Object" [] $ AST.Block dummyPosition []]
-        }
-  ]
 
 typecheck :: AST.Program -> TAST.Program
 typecheck prg = case flip evalState globalCtx $ runExceptT $ typecheckM prg of
   Left err   -> error err
   Right prg' -> prg'
-  where globalCtx = GlobalCtx { cIasses = prg ++ stdLib }
+  where globalCtx = GlobalCtx { cIasses = prg, stdLib = StdLib.stdLib }
 
 typecheckM :: AST.Program -> ExceptState TAST.Program
 typecheckM prg = do
   prechecked <- precheckProgram prg
-  cIassesL .= prechecked ++ stdLib
+  cIassesL .= prechecked
   checkProgram prechecked
 
 {- Prechecks
@@ -163,15 +157,17 @@ typecheckM prg = do
  -}
 precheckProgram :: AST.Program -> ExceptState AST.Program
 precheckProgram prg = do
-  liftBool "Classes must have unique names." $
-    hasNoDuplicates $ AST.cname <$> prg
+  liftBool "Classes must have unique names."
+    $ hasNoDuplicates $ AST.cname <$> prg
   mapM precheckClass prg
 
 precheckClass :: AST.Class -> ExceptState AST.Class
 precheckClass cIass = do
+  liftBoolM (name cIass ++ " redefines a standard library class.")
+    $ all ((name cIass /=) . simpleName) <$> gets stdLib
   precheckExtends cIass
   cIass & cconstructorsL %~ applyWhen' null (defConstructor cIass:)
-        & cextendsL %~ applyWhen' isNothing (const $ Just "Object")
+        & cextendsL %~ applyWhen' isNothing (const $ Just "java/lang/Object")
         & cconstructorsL . traverse %%~ precheckConstructor
   where precheckExtends = void . anchestors
 
@@ -189,9 +185,6 @@ precheckConstructor cr = do
 
 checkProgram :: AST.Program -> ExceptState TAST.Program
 checkProgram prg = do
-  -- check again for collisions with stdLib
-  liftBoolM "Classes must have unique names." $
-    hasNoDuplicates <$> AST.cname <$$> gets cIasses
   mapM checkClass prg
 
 checkClass :: AST.Class -> ExceptState TAST.Class
@@ -294,7 +287,7 @@ checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ ltype lname minit:s
   whenJust minit' $ \init' ->
     liftBool ("Expected initializer " ++ show (fromJust minit) ++ " to have declared type " ++ show ltype)
     =<< typee init' <: ltype
-  (block', defReturns) <- checkStmt (addLocal ltype lname ctx) target $ AST.Block blockPos stmts
+  (block', defReturns) <- checkStmt (ctx & localsL %~ Map.insert lname ltype) target $ AST.Block blockPos stmts
   --  This is safe, as AST.Block is used as input
   let (TAST.Block stmts') = block'
   return (TAST.Block (TAST.LocalVarDecl ltype lname minit':stmts'), defReturns)
@@ -472,7 +465,9 @@ checkExpr ctx (AST.StmtOrExprAsExpr _ (AST.MethodCall mexpr mname args)) = do
 -}
 -- doesn't need monad, because all classes are public/package and therefore accessible
 lookupClass :: Identifier -> ExceptState (Maybe AST.Class)
-lookupClass cname = find ((cname ==) . AST.cname) <$> gets cIasses
+lookupClass cname = asStdLib <<>^ asCIass
+  where asStdLib = find (((cname ==) . simpleName) ||| (cname ==) . name) <$> gets stdLib
+        asCIass  = find ((cname ==) . name) <$> gets cIasses
 resolveClass :: Identifier -> ExceptState AST.Class
 resolveClass cname = liftMaybe ("Class " ++ cname ++ " does not exist.") =<< lookupClass cname
 

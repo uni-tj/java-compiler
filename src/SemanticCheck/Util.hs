@@ -1,11 +1,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-module SemanticCheck.Util (TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), From(..), FromPartial(..)) where
+module SemanticCheck.Util (TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), From(..), FromPartial(..), simpleName) where
 
 import           Control.Monad.Except (MonadError)
 import qualified Types.AST            as AST
 import           Types.Core           (AccessModifier (..), Identifier,
                                        Type (..))
 import qualified Types.TAST           as TAST
+import Data.List.Extra (splitOn)
 
 class TypeTag a where
   typee :: a -> Type
@@ -69,3 +70,6 @@ instance ParamsTag TAST.Constructor where params = TAST.crparams
 class From b a where from :: a -> b
 
 class FromPartial b a e where fromM :: MonadError e m => a -> m b
+
+simpleName :: AST.Class -> Identifier
+simpleName = last . splitOn "/" . name

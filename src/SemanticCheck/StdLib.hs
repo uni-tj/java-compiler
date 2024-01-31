@@ -1,52 +1,69 @@
-module SemanticCheck.StdLib where
+module SemanticCheck.StdLib (stdLib) where
 
-import Types.AST
-import qualified Types.Core as Core
+import           Types.AST
+import qualified Types.Core as Type
+import           Types.Core (AccessModifier (..), Type)
+
+stdLib :: [Class]
+stdLib = [object, system, printStream]
+
+dummyPosition :: Position
+dummyPosition  = Position{ start = (0,0), end = (0,0) }
+
+object :: Class
+object = Class
+  { caccess       = Public
+  , cname         = "java/lang/Object"
+  , cextends      = Nothing
+  , cfields       = []
+  , cmethods      = []
+  , cconstructors = [ Constructor Public "java/lang/Object" [] $ Block dummyPosition [] ]
+  }
 
 printStream :: Class
 printStream =
   Class
     { cname = "java/io/PrintStream",
       cmethods =
-        [ printFunc "print" Char,
-          printFunc "print" Int,
-          printFunc "print" $ Instance "java/lang/Object",
-          printFunc "println" Bool,
-          printFunc "println" Char,
-          printFunc "println" Int,
-          printFunc "println" $ Instance "java/lang/Object"
+        [ printFunc "print" Type.Char,
+          printFunc "print" Type.Int,
+          printFunc "print" $ Type.Instance "java/lang/Object",
+          printFunc "println" Type.Bool,
+          printFunc "println" Type.Char,
+          printFunc "println" Type.Int,
+          printFunc "println" $ Type.Instance "java/lang/Object"
         ],
       cfields = [],
       cextends = Nothing,
       cconstructors =
-        [ Constructor {crparams = [], crname = "System", crbody = Block [], craccess = Public}
+        [ Constructor {crparams = [], crname = "System", crbody = Block dummyPosition [], craccess = Public}
         ],
       caccess = Public
     }
 
 printFunc :: String -> Type -> Method
-printFunc mname aType =
+printFunc mname ptype =
   Method
-    { mtype = Core.Void,
+    { mtype  = Type.Void,
       mstatic = True,
-      mparams = [(aType, "x")],
+      mparams = [(ptype, "x")],
       moverride = False,
       mname = mname,
-      mbody = Block [],
+      mbody = Block dummyPosition [],
       maccess = Public
     }
 
-systemClass :: Class
-systemClass =
+system :: Class
+system =
   Class
     { cname = "java/lang/System",
       cmethods = [],
       cfields =
-        [ Field {ftype = Core.Class "java/io/PrintStream", fstatic = True, foverride = False, fname = "out", finit = Nothing, faccess = Public}
+        [ Field {ftype = Type.Class "java/io/PrintStream", fstatic = True, foverride = False, fname = "out", finit = Nothing, faccess = Public}
         ],
       cextends = Just "java/lang/Object",
       cconstructors =
-        [ Constructor {crparams = [], crname = "java/io/PrintStream", crbody = Block [], craccess = Public}
+        [ Constructor {crparams = [], crname = "java/io/PrintStream", crbody = Block dummyPosition [], craccess = Public}
         ],
       caccess = Public
     }
