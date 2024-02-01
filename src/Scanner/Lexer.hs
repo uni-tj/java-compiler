@@ -1,9 +1,11 @@
-module Scanner.Lexer (lexWithIndex, lexWithoutIndex) where
+module Scanner.Lexer (scanner) where
 
 import Scanner.Token
 import Types.AST -- for Position type
 import Data.Char
 
+scanner :: String -> [PositionedToken]
+scanner = lexWithIndex
 
 lexWithIndex :: String -> [PositionedToken]
 lexWithIndex = filterIndexedTokens . indexTokens . validateTokens . lexer
