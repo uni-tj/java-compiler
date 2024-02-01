@@ -10,7 +10,7 @@ import Types.Core
       LocalName,
       LocalOrFieldOrClassName,
       MethodName,
-      Type(StringArr, Char, Int, Bool, Void, Class),
+      Type(StringArr, Char, Int, Bool, Void, Instance),
       UnOparator(..) )
 import Types.AST
     ( Position(..),
