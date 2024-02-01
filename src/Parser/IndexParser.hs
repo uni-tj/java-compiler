@@ -59,8 +59,8 @@ getPosFromStmt stmt = case stmt of
     (If pos _ _ _) -> pos
     (StmtOrExprAsStmt pos _) -> pos
     (While pos _ _) -> pos
-    (SuperCall _)-> Position {start = (0,0), end = (0,0)} -- there is no position in superCall
-    (ThisCall _) -> Position {start = (0,0), end = (0,0)} -- there is no position in thisCall
+    (SuperCall pos _)-> pos
+    (ThisCall pos _) -> pos
 
 getPosFromExpr :: Expr -> Position
 getPosFromExpr expr = case expr of
@@ -117,8 +117,6 @@ parseProgram = many parseClass
     Class = Visibility : Static : 'class' : 'extends' : ClassName :  '{' : ClassBody : '}'
           | Visibility : Static : 'class' : '{' : ClassBody : '}'
 -}
---TODO: ensure constructors have the correct name
---standard supertype: "Object" if not declared otherwise
 parseClass :: Parser PositionedToken Types.AST.Class
 parseClass =    ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posLexem EXTENDS +.+ parseClassName +.+ posLexem LBRACKET +.+ parseClassBody +.+ posLexem RBRACKET)
                 <<< (\(vis, (_, (name, (_ , (supName, (_, (cblock,_)))))))
@@ -176,12 +174,12 @@ parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRA
 
 parseThisOrSuperCall :: Parser PositionedToken  [Stmt]
 parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
-                            <<< \(_, (_, (params, _))) 
-                                -> [ThisCall params])
+                            <<< \(pos1, (_, (params, rb))) 
+                                -> [ThisCall (makePos pos1 rb) params])
 
                        ||| ((posLexem SUPER +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
-                            <<< \(_, (_, (params, _))) 
-                                -> [SuperCall params])
+                            <<< \(pos1, (_, (params, rb))) 
+                                -> [SuperCall (makePos pos1 rb) params])
 
 {-----------------------------------------------------------------------------}
 {-- # Methods ----------------------------------------------------------------}
