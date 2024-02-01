@@ -555,7 +555,7 @@ parseType =     (posLexem CHAR <<< (\tkn -> (Char, position tkn)))
             ||| (posLexem BOOLEAN <<< (\tkn -> (Bool, position tkn)))
             ||| (posLexem VOID <<< (\tkn -> (Void, position tkn)))
             ||| (posLexemParam (IDENTIFIER anyString)
-                    <<< \PositionedToken { token = (IDENTIFIER name), position = pos} -> (Types.Core.Class name, pos)) -- this pattern is safe
+                    <<< \PositionedToken { token = (IDENTIFIER name), position = pos} -> (Types.Core.Instance name, pos)) -- this pattern is safe
             ||| ((posLexem STRING +.+ posLexem LSQRBRACKET +.+ posLexem RSQRBRACKET)
                     <<< \(str, (_, rb)) -> (StringArr, makePos str rb))
 
