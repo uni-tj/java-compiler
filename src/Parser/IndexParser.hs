@@ -78,8 +78,13 @@ getPosFromExpr expr = case expr of
 {-- # main functionalities -}
 {-----------------------------------------------------------------------------}
 
-parser :: String -> Either String Program
-parser = tokenParser . lexWithIndex
+--AIO parser and scanner
+completeParser :: String -> Either String Program 
+completeParser = parser . lexWithIndex
+
+--parser only
+parser :: [PositionedToken] -> Either String Program
+parser = tokenParser
 
 tokenParser :: [PositionedToken] -> Either String Program
 tokenParser input =
@@ -525,6 +530,7 @@ boolLit = True
 anyString :: String
 anyString = "anything"
 
+-- all non exhaustive patterns are safe
 parseLiteral :: Parser PositionedToken (Literal, Position)
 parseLiteral =      (posLexemParam (INTLITERAL intLit)
                         <<< (\PositionedToken { token = (INTLITERAL x), position = pos} -> (IntLit x, pos)))
@@ -549,7 +555,7 @@ parseType =     (posLexem CHAR <<< (\tkn -> (Char, position tkn)))
             ||| (posLexem BOOLEAN <<< (\tkn -> (Bool, position tkn)))
             ||| (posLexem VOID <<< (\tkn -> (Void, position tkn)))
             ||| (posLexemParam (IDENTIFIER anyString)
-                    <<< \PositionedToken { token = (IDENTIFIER name), position = pos} -> (Types.Core.Class name, pos))
+                    <<< \PositionedToken { token = (IDENTIFIER name), position = pos} -> (Types.Core.Class name, pos)) -- this pattern is safe
             ||| ((posLexem STRING +.+ posLexem LSQRBRACKET +.+ posLexem RSQRBRACKET)
                     <<< \(str, (_, rb)) -> (StringArr, makePos str rb))
 
@@ -569,7 +575,7 @@ parseVisibility =     (posLexem PUBLIC <<< const Public)
 
 parseIdentifier :: Parser PositionedToken (Identifier, Position)
 parseIdentifier = posLexemParam (IDENTIFIER anyString)
-                    <<< \PositionedToken {token = (IDENTIFIER name), position = pos} -> (name, pos)
+                    <<< \PositionedToken {token = (IDENTIFIER name), position = pos} -> (name, pos) -- this pattern is safe
 
 parseClassName :: Parser PositionedToken (ClassName, Position)
 parseClassName = parseIdentifier

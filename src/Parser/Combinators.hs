@@ -74,7 +74,6 @@ posLexemParam tkn = satisfy (equivalent tkn . token) where
 
 infixr +.+, |||
 
-
 -- parse zero or n-many times the thing, p parses, and concat to list
 many :: Parser tok a -> Parser tok [a]
 many parser =     (parser <<< (: []))
@@ -97,8 +96,25 @@ satisfyE _ [] = [(Left "unexpected end of Input", [])]
 satisfyE cond (tkn : tkns) | cond tkn  = [(Right tkn, tkns)]
                            | otherwise = [(Left ("unexpected token: " ++ show tkn), tkns)]
 
+succeedE :: a -> EParser tok a
+succeedE value toks = [(Right value, toks)]
+
+manyE :: EParser tok a -> EParser tok [a] 
+manyE parser =    (parser >>> (: []))
+              <|> ((parser +++ manyE parser) >>> uncurry (:))
+              <|> succeedE []
+
 recogn :: Eq tok => Show tok => tok -> EParser tok tok
 recogn tkn = satisfyE (== tkn)
+
+
+item :: Token -> EParser PositionedToken PositionedToken
+item tkn = satisfyE (equivalent tkn . token)  where 
+        equivalent (IDENTIFIER _) (IDENTIFIER _) = True
+        equivalent (INTLITERAL _) (INTLITERAL _) = True
+        equivalent (BOOLLITERAL _) (BOOLLITERAL _) = True
+        equivalent (CHARLITERAL _) (CHARLITERAL _) = True
+        equivalent tkn1 tkn2 = tkn1 == tkn2
 
 -- The choice combinator
 (<|>) :: EParser tok a -> EParser tok a -> EParser tok a
@@ -121,11 +137,11 @@ recogn tkn = satisfyE (== tkn)
 -- The sequence combinator
 (+++) :: EParser tok a -> EParser tok b -> EParser tok (a, b)
 (p1 +++ p2) toks =  case p1 toks of 
-            [(Left err, _)] -> [(Left err, toks)]
+            [(Left err, _)] -> [(Left err, [])]
             [(Right v1, rest1)] -> case p2 rest1 of
-                    [(Left err, _)] -> [(Left err, toks)]
+                    [(Left err, _)] -> [(Left err, [])]
                     [(Right v2, rest2)] -> [(Right (v1, v2), rest2)]
-                    _ -> [(Left "unexpected error", toks)]
-            _ -> [(Left "unexpected error", toks)]
+                    _ -> [(Left "unexpected error1", [])]
+            _ -> [(Left "unexpected error2", [])]
 
 infixr +++, <|>
