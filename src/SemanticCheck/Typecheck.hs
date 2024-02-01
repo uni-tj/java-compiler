@@ -104,6 +104,7 @@ liftMaybeM :: MonadError e m => e -> m (Maybe a) -> m a
 liftMaybeM err = (>>= liftMaybe err)
 
 data AccessCtx = AccessCtx { astatic :: Bool, aname :: Identifier }
+  deriving (Show)
 instance StaticTag   AccessCtx where static = astatic
 instance NameTag     AccessCtx where name = aname
 instance From        AccessCtx ExprCtx where
