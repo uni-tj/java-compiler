@@ -136,12 +136,17 @@ item tkn = satisfyE (equivalent tkn . token)  where
 
 -- The sequence combinator
 (+++) :: EParser tok a -> EParser tok b -> EParser tok (a, b)
-(p1 +++ p2) toks =  case p1 toks of 
+{-
+(p1 +++ p2) toks =  case p1 toks of
             [(Left err, _)] -> [(Left err, [])]
             [(Right v1, rest1)] -> case p2 rest1 of
                     [(Left err, _)] -> [(Left err, [])]
                     [(Right v2, rest2)] -> [(Right (v1, v2), rest2)]
                     _ -> [(Left "unexpected error1", [])]
             _ -> [(Left "unexpected error2", [])]
+-}
+(p1 +++ p2) toks = [(Right (v1, v2), rest2) | (Right v1, rest1) <- p1 toks, (Right v2, rest2) <- p2 rest1] 
+                ++ [(Left err1, []) | (Left err1, _) <- p1 toks] 
+                ++ [(Left err2, []) | (Right _, rest1) <- p1 toks, (Left err2, _) <- p2 rest1] 
 
 infixr +++, <|>
