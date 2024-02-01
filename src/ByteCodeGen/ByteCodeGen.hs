@@ -2,6 +2,7 @@
 
 {-# HLINT ignore "Use null" #-}
 {-# HLINT ignore "Use list comprehension" #-}
+{-# HLINT ignore "Redundant bracket" #-}
 
 module ByteCodeGen.ByteCodeGen where
 
@@ -46,6 +47,7 @@ createClassFile (classInfo, (sf, (mi, cp))) = do
   let cName = cname classInfo
   let methods = cmethods classInfo
   let constructors = cconstructors classInfo
+  let accessModifier = caccess classInfo
 
   let methodObjects = map (\method -> createMethodObject (cName, method, sf)) methods
   let constructorObjects = map (\constructor -> createConstructorObject (cName, constructor, sf)) constructors
@@ -57,16 +59,15 @@ createClassFile (classInfo, (sf, (mi, cp))) = do
             maxver = MajorVersion {numMaxVer = 49},
             count_cp = length cp + 1,
             array_cp = map snd cp,
-            acfg = AccessFlags [], -- Todo: Calc Flags
-            this = ThisClass {index_th = ((findClass sf) cName)}, -- Query cp
+            acfg = AccessFlags (getAccessFlags (accessModifier, False)),
+            this = ThisClass {index_th = ((findClass sf) cName)},
             super =
               SuperClass
                 { index_sp =
                     ( (findClass sf)
                         ( case cextends classInfo of
                             Just a -> a
-                            _ -> "java/lang/Object" -- Query cp
-                            --
+                            _ -> "java/lang/Object"
                         )
                     )
                 },
@@ -84,7 +85,7 @@ createClassFile (classInfo, (sf, (mi, cp))) = do
 
 createMethodObject :: (String, Method, CP.SearchFunctions) -> Method_Info
 createMethodObject (cName, m@(Method methodAccess mtype methodStatic mName methodParams methodBody), sf) = do
-  let accessFlags = getAccessFlagsForMethod (methodAccess, methodStatic)
+  let accessFlags = getAccessFlags (methodAccess, methodStatic)
   let indexMethodName = (findName sf) mName
   let indexDescr = (findDesc sf) m
   let attributeCode = createAttributeCode (methodStatic, methodParams, methodBody, sf)
@@ -101,7 +102,7 @@ createMethodObject (cName, m@(Method methodAccess mtype methodStatic mName metho
 
 createConstructorObject :: (String, Constructor, CP.SearchFunctions) -> Method_Info
 createConstructorObject (cName, Constructor crAccess crParams crBody, sf) = do
-  let accessFlags = getAccessFlagsForMethod (crAccess, False)
+  let accessFlags = getAccessFlags (crAccess, False)
   let indexMethodName = (findName sf) "<init>"
   let indexDescr = (findAnyDesc sf) Void $ map fst crParams
   let attributeCode = createAttributeCode (False, crParams, crBody, sf)
@@ -123,11 +124,10 @@ createAttributeCode (methodStatic, params, body, sf) = do
   let methodCode = codeGenStmt (body, localVarArr, sf)
 
   AttributeCode
-    { index_name_attr = indexNameAttr, -- Code
-      tam_len_attr = length methodCode + 12, -- All bytes below
-      len_stack_attr = 1000, -- Todo: Calc max stack
-      len_local_attr = 255, -- length params + if methodStatic then 0 else 1,
-      -- TODO Does not work(Variable Number)
+    { index_name_attr = indexNameAttr,
+      tam_len_attr = length methodCode + 12,
+      len_stack_attr = length methodCode, -- Todo: Fix this
+      len_local_attr = length localVarArr,
       tam_code_attr = length methodCode,
       array_code_attr = methodCode,
       tam_ex_attr = 0,
@@ -351,12 +351,12 @@ getAccessFromClass = caccess
 getMbodyFromMethod :: Types.TAST.Method -> Stmt
 getMbodyFromMethod = mbody
 
-getAccessFlagsForMethod :: (Types.Core.AccessModifier, Bool) -> [Int]
-getAccessFlagsForMethod (accessFlags, methodStatic) =
+getAccessFlags :: (Types.Core.AccessModifier, Bool) -> [Int]
+getAccessFlags (accessFlags, static) =
   case accessFlags of
     Types.Core.Public -> 1 : methodStaticFlag
     Types.Core.Private -> 2 : methodStaticFlag
     Types.Core.Protected -> 4 : methodStaticFlag
     _ -> methodStaticFlag -- Todo: Is this right?
   where
-    methodStaticFlag = if methodStatic then [8] else []
+    methodStaticFlag = if static then [8] else []

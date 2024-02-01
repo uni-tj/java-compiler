@@ -45,7 +45,7 @@ printFunc :: String -> Type -> Method
 printFunc mname ptype =
   Method
     { mtype  = Type.Void,
-      mstatic = True,
+      mstatic = False,
       mparams = [(ptype, "x")],
       moverride = False,
       mname = mname,
@@ -59,7 +59,7 @@ system =
     { cname = "java/lang/System",
       cmethods = [],
       cfields =
-        [ Field {ftype = Type.Class "java/io/PrintStream", fstatic = True, foverride = False, fname = "out", finit = Nothing, faccess = Public}
+        [ Field {ftype = Type.Instance "java/io/PrintStream", fstatic = True, foverride = False, fname = "out", finit = Nothing, faccess = Public}
         ],
       cextends = Just "java/lang/Object",
       cconstructors =
