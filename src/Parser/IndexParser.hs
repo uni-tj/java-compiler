@@ -41,7 +41,7 @@ import Scanner.Token
             NOTEQUAL, INTLITERAL, CHARLITERAL, BOOLLITERAL, JNULL, CHAR, INT,
             BOOLEAN, VOID, STRING, LSQRBRACKET, RSQRBRACKET, PUBLIC, PRIVATE,
             PROTECTED) )
-import Scanner.Lexer ( lexWithIndex )
+import Scanner.Lexer ( scanner )
 
 -- computing the position spanning from position 1 to position 2
 spanPos :: Position -> Position -> Position
@@ -80,7 +80,7 @@ getPosFromExpr expr = case expr of
 
 --AIO parser and scanner
 completeParser :: String -> Either String Program 
-completeParser = parser . lexWithIndex
+completeParser = parser . scanner
 
 --parser only
 parser :: [PositionedToken] -> Either String Program
