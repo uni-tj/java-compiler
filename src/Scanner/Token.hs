@@ -102,4 +102,7 @@ data Token
 
 -- represents Token with line-number in source-file
 data PositionedToken = PositionedToken
- { position :: Position, token :: Token } deriving (Show, Eq)
+ { position :: Position, token :: Token }
+
+instance Show PositionedToken where
+     show (PositionedToken _ t) = show t
