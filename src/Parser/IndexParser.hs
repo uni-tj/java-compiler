@@ -1,5 +1,5 @@
 
-module Parser.IndexParser(parser) where
+module Parser.IndexParser where
 
 import Types.Core
     ( AccessModifier(Package, Public, Private),
@@ -78,11 +78,21 @@ getPosFromExpr expr = case expr of
 {-- # main functionalities -}
 {-----------------------------------------------------------------------------}
 
-parser :: String -> Program
+parser :: String -> Either String Program
 parser = tokenParser . lexWithIndex
 
-tokenParser :: [PositionedToken] -> Program
-tokenParser input = fst (head (correctSols (parseProgram input)))
+tokenParser :: [PositionedToken] -> Either String Program
+tokenParser input =
+    let parsed = parseProgram input
+    in
+        let correctSolutions =  correctSols parsed
+        in 
+            if null correctSolutions then Left (remaining parsed)
+            else Right (fst (head (correctSols (parseProgram input))))
+
+remaining :: Show b => [(a, [b])] -> String 
+remaining ((_, [b]) : xs) = "error on tokens: " ++ show b
+remaining _ = " ";
 
 correctSols :: [(t, [a])] -> [(t, [a])]
 correctSols = filter (\(_, resttokens) -> null resttokens)

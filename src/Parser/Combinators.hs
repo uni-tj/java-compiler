@@ -1,25 +1,15 @@
 module Parser.Combinators where
 
 import Scanner.Token
+import Data.Bifoldable (bifoldl1)
 
 type Parser toks a = [toks] -> [(a, [toks])]
-
--- for now an error is just a String
-type ParseError = String
-
-type ParserWithError tok a = [tok] -> Either ParseError (a, [tok]) 
 
 failure :: Parser a b                       -- Parser der leeren Sprache
 failure _ = []
 
-errorFailure :: String -> ParserWithError a b 
-errorFailure msg _ = Left msg
-
 succeed :: a -> Parser tok a                -- Parser der Sprache des 
 succeed value toks = [(value, toks)]        -- leeren Worts (\epsilon)
-
-succeedE :: a -> ParserWithError tok a
-succeedE value toks = Right (value, toks)
 
 -- conditional recognition
 satisfy :: (tok -> Bool) -> Parser tok tok 
@@ -27,29 +17,22 @@ satisfy _ [] = []
 satisfy cond (tkn : tkns) | cond tkn  = succeed tkn tkns
                           | otherwise = failure tkns
 
-
-
+{-
 -- AIO recognition a singular token with error handling and position tracking
 recon :: Token -> ParserWithError PositionedToken PositionedToken
-recon tkn [] = Left ("unexpected end of Input, expected: " ++ show tkn)
-recon tkn (tok : toks)  | equivalent tkn (token tok) = Right (tok, toks)
-                        | otherwise = Left ("unexpected token: " ++ show tok ++ ", expected: " ++ show tkn 
-                                            ++ " at " ++ show (position tok))
+recon tkn [] = [Left ("unexpected end of Input, expected: " ++ show tkn)]
+recon tkn (tok : toks)  | equivalent tkn (token tok) = [Right (tok, toks)]
+                        | otherwise = [Left ("unexpected token: " ++ show tok ++ ", expected: " ++ show tkn 
+                                            ++ " at " ++ show (position tok))]
             where
                 equivalent (IDENTIFIER _) (IDENTIFIER _) = True
                 equivalent (INTLITERAL _) (INTLITERAL _) = True
                 equivalent (BOOLLITERAL _) (BOOLLITERAL _) = True
                 equivalent (CHARLITERAL _) (CHARLITERAL _) = True
                 equivalent tkn1 tkn2 = tkn1 == tkn2
-
+-}
 -- functions to recognize tokens with error handling
-satisfyE :: Show tok =>  (tok -> Bool) -> ParserWithError tok tok
-satisfyE _ [] = Left "unexpected end of Input"
-satisfyE cond (tkn : tkns)  | cond tkn = Right (tkn, tkns)
-                            | otherwise = Left ("unexpected token: " ++ show tkn)
 
-lexemE :: (Eq tok, Show tok) => tok -> ParserWithError tok tok
-lexemE tkn = satisfyE (== tkn)
 
 -- recognition of a lexem (terminal)
 lexem :: Token -> Parser Token Token
@@ -81,7 +64,7 @@ posLexemParam tkn = satisfy (equivalent tkn . token) where
 -- sequential recognition
 (+.+) :: Parser tok a -> Parser tok b -> Parser tok (a,b)
 (p1 +.+ p2) toks = [((v1, v2), rest2) | (v1, rest1) <- p1 toks,
-                                         (v2, rest2) <- p2 rest1]
+                                        (v2, rest2) <- p2 rest1]
 -- alternative
 (|||) :: Parser tok a -> Parser tok a -> Parser tok a
 (p1 ||| p2) toks = p1 toks ++ p2 toks
@@ -91,39 +74,6 @@ posLexemParam tkn = satisfy (equivalent tkn . token) where
 
 infixr +.+, |||
 
--- combinators, semanitally identicalwith but with error handling support
-(+++) :: ParserWithError tok a -> ParserWithError tok b -> ParserWithError tok (a,b)
-(p1 +++ p2) toks = case p1 toks of
-    Left err -> Left err
-    Right (v1, rest1) -> case p2 rest1 of
-        Left err -> Left err
-        Right (v2, rest2) -> Right ((v1, v2), rest2)
-
-(<||>) :: ParserWithError tok a -> ParserWithError tok a -> ParserWithError tok a
-(p1 <||> p2) toks = case p1 toks of
-    Left err -> case p2 toks of
-        Left err2 -> Left (err ++ " or " ++ err2) -- might wanna changes this to "or" in the future
-        Right (v2, rest2) -> Right (v2, rest2)
-    Right (v1, rest1) -> Right (v1, rest1)
-
---alternative combinator to use with error handling
-(<|>) :: ParserWithError tok a -> ParserWithError tok a -> ParserWithError tok a
-(p1 <|> p2) toks = case p1 toks of
-    Left err -> case p2 toks of
-        Left err2 -> Left err2 -- might wanna changes this to "or" in the future
-        Right (v2, rest2) -> Left "meta error: base case error not correct"
-    Right (v1, rest1) -> Right (v1, rest1)
-
-
-
-(<$$>) :: ParserWithError tok a -> (a -> b) -> ParserWithError tok b
-(p <$$> f) toks = case p toks of
-    Left err -> Left err
-    Right (v, rest) -> Right (f v, rest)
-
-infixr +++, <||>
-infixl <|>
-
 
 -- parse zero or n-many times the thing, p parses, and concat to list
 many :: Parser tok a -> Parser tok [a]
@@ -131,7 +81,51 @@ many parser =     (parser <<< (: []))
               ||| ((parser +.+ many parser) <<< uncurry (:))
               ||| succeed []
 
-manyE :: ParserWithError tok a -> ParserWithError tok [a]
-manyE parser =     (parser <$$> (: []))
-              <||> ((parser +++ manyE parser) <$$> uncurry (:))
-              <||> succeedE []
+
+
+-- error handling: 
+
+type ParseError = String 
+
+type EParser tok a = [tok] -> [(Either ParseError a, [tok])]
+
+failureE :: EParser a b
+failureE _ = [(Left "unexpected end of Input", [])]
+
+satisfyE :: Show tok => (tok -> Bool) -> EParser tok tok 
+satisfyE _ [] = [(Left "unexpected end of Input", [])]
+satisfyE cond (tkn : tkns) | cond tkn  = [(Right tkn, tkns)]
+                           | otherwise = [(Left ("unexpected token: " ++ show tkn), tkns)]
+
+recogn :: Eq tok => Show tok => tok -> EParser tok tok
+recogn tkn = satisfyE (== tkn)
+
+-- The choice combinator
+(<|>) :: EParser tok a -> EParser tok a -> EParser tok a
+(p1 <|> p2) toks = let res1 = p1 toks
+                       res2 = p2 toks
+                   in case (res1, res2) of
+                        ([(Right v1, rest1)], [(Left _, _)]) -> [(Right v1, rest1)]
+                        ([(Left _, _)], [(Right v2, rest2)]) -> [(Right v2, rest2)]
+                        ([(Right v1, rest1)], [(Right v2, rest2)]) -> [(Right v1, rest1), (Right v2, rest2)]
+                        ([(Left err1, _)],[(Left err2, _)]) -> [(Left (err1 ++ " or " ++ err2),[])]
+                        _ -> res1 ++ res2
+
+-- The bind combinator
+(>>>) :: EParser tok a -> (a -> b) -> EParser tok b
+(p >>> f) toks = [ case v of
+                    Left err -> (Left err, rest)
+                    Right val -> (Right (f val), rest)
+                 | (v, rest) <- p toks]
+
+-- The sequence combinator
+(+++) :: EParser tok a -> EParser tok b -> EParser tok (a, b)
+(p1 +++ p2) toks =  case p1 toks of 
+            [(Left err, _)] -> [(Left err, toks)]
+            [(Right v1, rest1)] -> case p2 rest1 of
+                    [(Left err, _)] -> [(Left err, toks)]
+                    [(Right v2, rest2)] -> [(Right (v1, v2), rest2)]
+                    _ -> [(Left "unexpected error", toks)]
+            _ -> [(Left "unexpected error", toks)]
+
+infixr +++, <|>
