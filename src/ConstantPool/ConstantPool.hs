@@ -392,7 +392,7 @@ traverseStmtOrExpr (TAST.MethodCall mreT expr cname isStatic mname args) = do
         index_nameandtype_cp = ntIdx,
         desc = ""
       }
-
+  traverseExpr expr
   mapM_ (traverseExpr . snd) args
 
 traverseLit :: TAST.Literal -> ConstantPoolState Int
@@ -431,9 +431,10 @@ isClass _ _ = False
 
 findClass' :: String -> ConstantPoolState Int
 findClass' str = do
+  (mi, cp) <- get
   cname <- findUtf8' str
 
-  cIdx <- findEntry (isClass (getResult "Could not Find UTF8 Class with matching name" cname))
+  cIdx <- findEntry (isClass (getResult ("Could not Find UTF8 Class with matching name" ++ debugStr cp [("cname", str)]) cname))
   return
     ( getResult
         "Could not find Matching Class"

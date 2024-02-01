@@ -18,8 +18,6 @@ This is intentional to ensure its usability even if we decide to implement more 
 Todos:
 
 - check variable redeclarations (in nested blocks)
-- add missing constructor
-- this and super calls, can only appear in constructors as first statement
 - position errors?
 
 Features:
