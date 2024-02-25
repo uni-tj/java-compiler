@@ -1,12 +1,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module SemanticCheck.Util (TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), From(..), FromPartial(..), simpleName) where
 
+import           Control.Lens         (Lens', view)
 import           Control.Monad.Except (MonadError)
+import           Data.Functor         ((<&>))
+import           Data.List.Extra      (splitOn)
 import qualified Types.AST            as AST
 import           Types.Core           (AccessModifier (..), Identifier,
                                        Type (..))
 import qualified Types.TAST           as TAST
-import Data.List.Extra (splitOn)
 
 class TypeTag a where
   typee :: a -> Type
@@ -66,6 +68,15 @@ instance ParamsTag AST.Method      where params = AST.mparams
 instance ParamsTag AST.Constructor where params = AST.crparams
 instance ParamsTag TAST.Method      where params = TAST.mparams
 instance ParamsTag TAST.Constructor where params = TAST.crparams
+
+-- class BodyTag a b where
+--   bodyL :: Lens' a b
+--   body :: a -> b
+--   body = view bodyL
+-- instance BodyTag TAST.Method      TAST.Stmt where
+--   bodyL fn (TAST.Method a b c d e f) = fn f <&> TAST.Method a b c d e
+-- instance BodyTag TAST.Constructor TAST.Stmt where
+--   bodyL fn (TAST.Constructor a b c) = fn c <&> TAST.Method a b
 
 class From b a where from :: a -> b
 

@@ -38,3 +38,6 @@ Features:
   - @override labelled methods must be overrides
   - no inheritance cycle
   - inherited classes must exist
+- inject return
+  - only void methods
+  - only if not definitely returning

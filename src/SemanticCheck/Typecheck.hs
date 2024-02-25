@@ -27,7 +27,7 @@ import qualified Data.Map             as Map
 import           Data.Maybe           (fromJust, fromMaybe, isJust, isNothing,
                                        listToMaybe, mapMaybe)
 import           Data.Tuple.Extra     (swap)
-import           Debug.Trace          (traceShow, traceShowId)
+import           Debug.Trace          (traceShow)
 import           Prelude              hiding (EQ, GT, LT, unzip)
 import qualified SemanticCheck.StdLib as StdLib
 import           SemanticCheck.Util
@@ -83,7 +83,7 @@ cconstructorsL :: Lens' AST.Class [AST.Constructor]
 cconstructorsL fn (AST.Class a b c d e f) = fn f <&> AST.Class a b c d e
 
 crbodyL :: Lens' AST.Constructor AST.Stmt
-crbodyL f (AST.Constructor a b c d) = flip fmap (f d) $ AST.Constructor a b c
+crbodyL f (AST.Constructor a b c d) = f d <&> AST.Constructor a b c
 
 localsL :: Lens' ExprCtx (Map Identifier Type)
 localsL f (Ctx a b c) = f a <&> \a' -> Ctx a' b c
@@ -281,8 +281,10 @@ checkConstructor cIass cr@AST.Constructor{ AST.craccess, AST.crparams, AST.crbod
         checkReturn (AST.StmtOrExprAsStmt _ _) = return ()
 
 checkStmt :: ExprCtx -> {-target::-}Type -> AST.Stmt -> ExceptState (TAST.Stmt, {-definiteReturn::-}Bool)
-checkStmt _   _      (AST.Block _ []) =
-  return (TAST.Block [], False)
+checkStmt _   target (AST.Block _ []) =
+  if target == Void
+  then return (TAST.Block [TAST.Return Nothing], True)
+  else return (TAST.Block [], False)
 checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ ltype lname minit:stmts)) = do
   minit' <- mapM (checkExpr ctx) minit
   whenJust minit' $ \init' ->
@@ -294,13 +296,16 @@ checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ ltype lname minit:s
   return (TAST.Block (TAST.LocalVarDecl ltype lname minit':stmts'), defReturns)
 checkStmt ctx target (AST.Block blockPos (stmt:stmts)) = do
   (stmt', defReturn) <- checkStmt ctx target stmt
-  (block', defReturns) <- checkStmt ctx target $ AST.Block blockPos stmts
-  --  This is safe, as AST.Block is used as input
-  let (TAST.Block stmts') = block'
-  when defReturn
-    $ liftBool ("Unreachable code: " ++ show stmts' ++ ".")
-    $ null stmts
-  return (TAST.Block (stmt':stmts'), defReturn || defReturns)
+  if defReturn
+  then do
+    liftBool ("Unreachable code: " ++ show stmts ++ ".")
+      $ null stmts
+    return (TAST.Block [stmt'], True)
+  else do
+    (block', defReturns) <- checkStmt ctx target $ AST.Block blockPos stmts
+    --  This is safe, as AST.Block is used as input
+    let (TAST.Block stmts') = block'
+    return (TAST.Block (stmt':stmts'), defReturn || defReturns)
 checkStmt ctx target (AST.Return pos mexpr) = do
   mexpr' <- mapM (checkExpr ctx) mexpr
   whenNothing mexpr'
