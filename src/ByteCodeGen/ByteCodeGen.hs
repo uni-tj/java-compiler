@@ -256,7 +256,7 @@ codeGenExpr (Literal literalType literal, localVarArr, sf) = do
   case literalType of
     Types.Core.Int -> (19 : codeGenLiteral literal sf, literalType)
     Types.Core.Bool -> (codeGenLiteral literal sf, literalType)
-    Types.Core.Char -> (codeGenLiteral literal sf, literalType)
+    Types.Core.Char -> (19 : codeGenLiteral literal sf, literalType)
     _ -> ([], NullType)
 codeGenExpr (StmtOrExprAsExpr stmtOrExpr, localVarArr, sf) = codeGenStmtOrExpr (stmtOrExpr, localVarArr, sf)
 
