@@ -6,9 +6,6 @@
 
 module ByteCodeGen.ByteCodeGen where
 
--- import ByteCodeGen.JavaTestFiles.SimpleForLoop.SimpleForLoopTAST (testAst)
--- import ByteCodeGen.JavaTestFiles.GGT.GgtTAST (ggtErw)
-import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST (classes)
 import ConstantPool.ConstantPool as CP
 import qualified ConstantPool.ConstantPool as CP
 import Data.Bits
@@ -137,7 +134,6 @@ createAttributeCode (methodStatic, params, body, sf) = do
     }
 
 -- Function to get all local variable and store the number (index in array) of the local variable -> in order to find them later
--- Todo: "This" must be index 0, than function paras -> class.method(a,b) -> this=0 a=1 b=2, ... (localvar decs)
 type LocalVarArrType = [(String, Types.Core.Type)]
 
 localVarGen :: (Bool, [(Type, LocalName)], Stmt) -> LocalVarArrType
@@ -145,7 +141,7 @@ localVarGen (methodStatic, params, body) = do
   localVarGenMethodStatic methodStatic ++ localVarGenParams params ++ localVarGenBody body
 
 localVarGenMethodStatic :: Bool -> LocalVarArrType
-localVarGenMethodStatic methodStatic = if methodStatic then [] else [("This", Instance "This")] -- Todo: Is this right?
+localVarGenMethodStatic methodStatic = if methodStatic then [] else [("This", Instance "This")]
 
 localVarGenParams :: [(Type, LocalName)] -> LocalVarArrType
 localVarGenParams = map transform
@@ -172,7 +168,7 @@ codeGenStmt (Return mexpr, localVarArr, sf) = do
         Types.Core.Int -> exprCode ++ [172] -- ireturn
         Types.Core.Bool -> exprCode ++ [172] -- ireturn
         Types.Core.Char -> exprCode ++ [172] -- ireturn
-        Types.Core.Instance instanceName -> exprCode ++ [176] -- areturn Todo: Is this right?
+        Types.Core.Instance instanceName -> exprCode ++ [176] -- areturn
         Types.Core.Class className -> error "Class can not be returned"
         _ -> []
     Nothing -> [177]
@@ -200,7 +196,7 @@ codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr, sf) = do
               codeExpr ++ [196, 54] ++ splitLenInTwoBytes index
             Types.Core.Instance className -> do
               let (codeExpr, t) = codeGenExpr (expr, localVarArr, sf)
-              codeExpr ++ [196, 58] ++ splitLenInTwoBytes index -- Todo: 58 astore?
+              codeExpr ++ [196, 58] ++ splitLenInTwoBytes index -- astore
             Types.Core.Class className -> error "Class can not be assigt to a var"
             _ -> []
         Nothing -> []
@@ -215,7 +211,6 @@ codeGenStmt (If expr stmt mStmt, localVarArr, sf) =
         then -- +3 because of added goto --- [167] ++ splitLenInTwoBytes (length codeElseStmt) -> goto to overjump else when if is taken
           codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3 + 3) ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt + 3) ++ codeElseStmt
         else codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3) ++ codeStmt
--- Todo: What to do?
 codeGenStmt (ThisCall className paras, localVarArr, sf) = do
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr, sf))) paras
 
@@ -230,7 +225,7 @@ codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr, sf) = do
 
 codeGenExpr :: (Expr, LocalVarArrType, CP.SearchFunctions) -> ([Int], Type)
 codeGenExpr (This thisType, localVarArr, sf) = ([42], thisType) -- Aload_0
-codeGenExpr (Super superName, localVarArr, sf) = ([], NullType) -- Todo: Ask
+codeGenExpr (Super superName, localVarArr, sf) = ([], NullType)
 codeGenExpr (LocalVar localVarType localVarName, localVarArr, sf) = do
   let i = findIndex ((== localVarName) . fst) localVarArr
   case i of
@@ -244,7 +239,6 @@ codeGenExpr (LocalVar localVarType localVarName, localVarArr, sf) = do
         _ -> ([], localVarType)
     Nothing -> ([], localVarType)
 codeGenExpr (ClassRef cType cName, localVarArr, sf) = ([], cType)
--- Todo: Add getstatic
 codeGenExpr (FieldAccess fieldType expr classname static fieldName, localVarArr, sf) = do
   let (exprCode, t) = codeGenExpr (expr, localVarArr, sf)
   let getFieldCode = (if static then 178 else 180) : (splitLenInTwoBytes $ traceShow "0x1" $ (findField sf) classname fieldName fieldType)
@@ -288,10 +282,10 @@ codeGenStmtOrExpr (a@(FieldAssign varType tagetExpr className static fieldName v
   let fieldref = splitLenInTwoBytes $ traceShow ("0x2" ++ show fieldName ++ show varType ++ show a) $ (findField sf) className fieldName varType
 
   if static
-    then (tagetExprCode ++ valueExprCode ++ [179] ++ fieldref, varType) -- putstatic -- Todo: Query CP of FieldRef_Info
-    else (tagetExprCode ++ valueExprCode ++ [181] ++ fieldref, varType) -- putfield -- Todo: Query CP of FieldRef_Info
+    then (tagetExprCode ++ valueExprCode ++ [179] ++ fieldref, varType)
+    else (tagetExprCode ++ valueExprCode ++ [181] ++ fieldref, varType)
 codeGenStmtOrExpr (New newType className exprs, localVarArr, sf) = do
-  let newCode = [187] ++ (splitLenInTwoBytes ((findClass sf) className)) ++ [89 {-Dup-}] ++ [183] ++ (splitLenInTwoBytes $ (findConstructor sf) className $ map fst exprs) -- Todo: Query CP for Class_Info/MethodRef_Info -> Call constructor
+  let newCode = [187] ++ (splitLenInTwoBytes ((findClass sf) className)) ++ [89 {-Dup-}] ++ [183] ++ (splitLenInTwoBytes $ (findConstructor sf) className $ map fst exprs) -- -> Call constructor
   let paraCode = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr, sf))) exprs
 
   (paraCode ++ newCode, newType)
@@ -301,7 +295,7 @@ codeGenStmtOrExpr (m@(MethodCall methodType expr className static methodName par
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr, sf))) paras
 
   let methodref = splitLenInTwoBytes $ (findMethodCall sf) m
-  let codeInvoke = if static then [184] ++ methodref else [182] ++ methodref -- Todo: Query CP for MethodRef_Info
+  let codeInvoke = if static then [184] ++ methodref else [182] ++ methodref
   (codeExpr ++ codeParas ++ codeInvoke, methodType)
 
 codeGenBinOperator :: BinOperator -> [Int]
@@ -321,7 +315,7 @@ codeGenBinOperator NEQ = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, 
 
 codeGenUnOparator :: UnOparator -> [Int]
 codeGenUnOparator Plus = [] -- -> Do nothing
-codeGenUnOparator Minus = [116] -- Todo: -i? -> Use INEG
+codeGenUnOparator Minus = [116] -- -> Use INEG
 codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
 
 codeGenLiteral :: Literal -> CP.SearchFunctions -> [Int]
@@ -330,33 +324,18 @@ codeGenLiteral lit@(CharLit _) sf = splitLenInTwoBytes $ (findLiteral sf) lit
 codeGenLiteral (BoolLit bool) _ = if bool then [4] else [3] -- Push directly 1 (4) or 0 (3)
 codeGenLiteral Null _ = []
 
+getAccessFlags :: (Types.Core.AccessModifier, Bool) -> [Int]
+getAccessFlags (accessFlags, static) =
+  case accessFlags of
+    Types.Core.Public -> 1 : staticFlag
+    Types.Core.Private -> 2 : staticFlag
+    Types.Core.Protected -> 4 : staticFlag
+    _ -> staticFlag
+  where
+    staticFlag = if static then [8] else []
+
 splitLenInTwoBytes :: Int -> [Int]
 splitLenInTwoBytes len = [highByte, lowByte]
   where
     highByte = (len `shiftR` 8) .&. 0xFF
     lowByte = len .&. 0xFF
-
-getConstructorsFromClass :: Types.TAST.Class -> [Constructor]
-getConstructorsFromClass = cconstructors
-
-getMethodsFromClass :: Types.TAST.Class -> [Method]
-getMethodsFromClass = cmethods
-
-getNameFromClass :: Types.TAST.Class -> String
-getNameFromClass = cname
-
-getAccessFromClass :: Types.TAST.Class -> AccessModifier
-getAccessFromClass = caccess
-
-getMbodyFromMethod :: Types.TAST.Method -> Stmt
-getMbodyFromMethod = mbody
-
-getAccessFlags :: (Types.Core.AccessModifier, Bool) -> [Int]
-getAccessFlags (accessFlags, static) =
-  case accessFlags of
-    Types.Core.Public -> 1 : methodStaticFlag
-    Types.Core.Private -> 2 : methodStaticFlag
-    Types.Core.Protected -> 4 : methodStaticFlag
-    _ -> methodStaticFlag -- Todo: Is this right?
-  where
-    methodStaticFlag = if static then [8] else []

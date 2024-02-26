@@ -1,6 +1,5 @@
 module ConstantPool.ConstantPool where
 
-import ByteCodeGen.JavaTestFiles.Classes.ClassesTAST
 import Control.Monad.State
 import Data.Bool (Bool (True))
 import qualified Data.ByteString as BS
