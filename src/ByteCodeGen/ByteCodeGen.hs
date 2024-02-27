@@ -111,7 +111,7 @@ createAttributeCode (methodStatic, params, body, sf) = do
 
   AttributeCode
     { index_name_attr = indexNameAttr,
-      tam_len_attr = length methodCode + 12,
+      tam_len_attr = length methodCode + 12, -- it is always + 12 because we dont have array_ex_attr ect.
       len_stack_attr = calcMaxStackSize methodCode,
       len_local_attr = length localVarArr,
       tam_code_attr = length methodCode,
@@ -121,46 +121,6 @@ createAttributeCode (methodStatic, params, body, sf) = do
       tam_atrr_attr = 0,
       array_attr_attr = []
     }
-
--- Calc Stacksize - never underestimate
-calcMaxStackSize :: [Int] -> Int
-calcMaxStackSize = snd . foldl updateMax (0, 0)
-  where
-    updateMax (currentStackSize, maxStackSize) opcode =
-      let newStackSize = currentStackSize + calcLenStack opcode
-      in (newStackSize, max newStackSize maxStackSize)
-
-calcLenStack :: Int -> Int
-calcLenStack opcode
-  | opcode == 172 = -1 -- ireturn
-  | opcode == 176 = -1 -- areturn
-  | opcode == 153 = -1 -- ifeq
-  | opcode == 154 = -1 -- ifne
-  | opcode == 54 = -1 -- istore
-  | opcode == 58 = -1 -- astore
-  | opcode == 42 = 1 -- aload_0 
-  | opcode == 21 = 1 -- iload 
-  | opcode == 25 = 1 -- aload
-  | opcode == 178 = 1 -- getstatic
-  | opcode == 180 = 1 -- getfield
-  | opcode == 19 = 1 -- ldc_w
-  | opcode == 179 = -1 -- putstatic
-  | opcode == 181 = -1 -- putfield
-  | opcode == 187 = 1 -- new 
-  | opcode == 89 = 1 -- dup 
-  | opcode == 96 = -1 -- iadd 
-  | opcode == 100 = -1 -- isub 
-  | opcode == 104 = -1 -- imul 
-  | opcode == 108 = -1 -- idiv 
-  | opcode == 112 = -1 -- irem 
-  | opcode == 126 = -1 -- iand 
-  | opcode == 128 = -1 -- ior 
-  | opcode == 130 = -1 -- ixor 
-  | opcode == 161 = -2 -- if_icmplt 
-  | opcode == 163 = -2 -- if_icmpgt 
-  | opcode == 3 = 1 -- iconst_0 
-  | opcode == 4 = 1 -- iconst_1
-  | otherwise = 0
 
 codeGenStmt :: (Stmt, LocalVarArrType, CP.SearchFunctions) -> [Int]
 codeGenStmt (Block blocks, localVarArr, sf) = concatMap (\block -> codeGenStmt (block, localVarArr, sf)) blocks
@@ -353,6 +313,46 @@ localVarGenBody (If _ stmt mStmt) = localVarGenBody stmt ++ maybe [] localVarGen
 localVarGenBody (StmtOrExprAsStmt _) = []
 localVarGenBody (ThisCall _ _) = []
 localVarGenBody (SuperCall _ _) = []
+
+-- Calc Stacksize - never underestimate
+calcMaxStackSize :: [Int] -> Int
+calcMaxStackSize = snd . foldl updateMax (0, 0)
+  where
+    updateMax (currentStackSize, maxStackSize) opcode =
+      let newStackSize = currentStackSize + calcLenStack opcode
+      in (newStackSize, max newStackSize maxStackSize)
+
+calcLenStack :: Int -> Int
+calcLenStack opcode
+  | opcode == 172 = -1 -- ireturn
+  | opcode == 176 = -1 -- areturn
+  | opcode == 153 = -1 -- ifeq
+  | opcode == 154 = -1 -- ifne
+  | opcode == 54 = -1 -- istore
+  | opcode == 58 = -1 -- astore
+  | opcode == 42 = 1 -- aload_0 
+  | opcode == 21 = 1 -- iload 
+  | opcode == 25 = 1 -- aload
+  | opcode == 178 = 1 -- getstatic
+  | opcode == 180 = 1 -- getfield
+  | opcode == 19 = 1 -- ldc_w
+  | opcode == 179 = -1 -- putstatic
+  | opcode == 181 = -1 -- putfield
+  | opcode == 187 = 1 -- new 
+  | opcode == 89 = 1 -- dup 
+  | opcode == 96 = -1 -- iadd 
+  | opcode == 100 = -1 -- isub 
+  | opcode == 104 = -1 -- imul 
+  | opcode == 108 = -1 -- idiv 
+  | opcode == 112 = -1 -- irem 
+  | opcode == 126 = -1 -- iand 
+  | opcode == 128 = -1 -- ior 
+  | opcode == 130 = -1 -- ixor 
+  | opcode == 161 = -2 -- if_icmplt 
+  | opcode == 163 = -2 -- if_icmpgt 
+  | opcode == 3 = 1 -- iconst_0 
+  | opcode == 4 = 1 -- iconst_1
+  | otherwise = 0
 
 getAccessFlags :: (Types.Core.AccessModifier, Bool) -> [Int]
 getAccessFlags (accessFlags, static) =
