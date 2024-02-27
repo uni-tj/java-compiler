@@ -3,35 +3,24 @@
 {-# HLINT ignore "Use null" #-}
 {-# HLINT ignore "Use list comprehension" #-}
 {-# HLINT ignore "Redundant bracket" #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-local-binds #-}
 
 module ByteCodeGen.ByteCodeGen where
 
 import           ConstantPool.ConstantPool as CP
-import qualified ConstantPool.ConstantPool as CP
 import           Data.Bits
 import           Data.List                 (findIndex)
 import           Debug.Trace
 import           Jvm.Data.ClassFormat
-import qualified Jvm.Data.ClassFormat      as CF
 import           Types.Core
 import           Types.TAST
 
--- Question
--- 1. What to do with chars?
--- Nur Print sonst Int
--- 2. How to calc max stack?
--- Den Baum durchgehen -> Lieber zuviel
--- 3. Doku
+-- Doku
 -- Wie kann man den Code einzeln anschauen
 -- Tests schreiben und zeigen wie man Tests ausführen
 -- Was hat man sich gedacht bei z.B. max stack gedacht
 -- Pro Person ca. 1 Seite
-
--- Todo:
--- Query CP
--- Load constants for cp
--- Remove negativ numbers
--- Remove consturctor code
 
 codeGen :: [(Class, (CP.SearchFunctions, CP.MICP))] -> [ClassFile]
 codeGen classList = do
@@ -123,7 +112,7 @@ createAttributeCode (methodStatic, params, body, sf) = do
   AttributeCode
     { index_name_attr = indexNameAttr,
       tam_len_attr = length methodCode + 12,
-      len_stack_attr = length methodCode, -- Todo: Fix this
+      len_stack_attr = calcMaxStackSize methodCode,
       len_local_attr = length localVarArr,
       tam_code_attr = length methodCode,
       array_code_attr = methodCode,
@@ -133,30 +122,45 @@ createAttributeCode (methodStatic, params, body, sf) = do
       array_attr_attr = []
     }
 
--- Function to get all local variable and store the number (index in array) of the local variable -> in order to find them later
-type LocalVarArrType = [(String, Types.Core.Type)]
-
-localVarGen :: (Bool, [(Type, LocalName)], Stmt) -> LocalVarArrType
-localVarGen (methodStatic, params, body) = do
-  localVarGenMethodStatic methodStatic ++ localVarGenParams params ++ localVarGenBody body
-
-localVarGenMethodStatic :: Bool -> LocalVarArrType
-localVarGenMethodStatic methodStatic = if methodStatic then [] else [("This", Instance "This")]
-
-localVarGenParams :: [(Type, LocalName)] -> LocalVarArrType
-localVarGenParams = map transform
+-- Calc Stacksize - never underestimate
+calcMaxStackSize :: [Int] -> Int
+calcMaxStackSize = snd . foldl updateMax (0, 0)
   where
-    transform (t, name) = (name, t)
+    updateMax (currentStackSize, maxStackSize) opcode =
+      let newStackSize = currentStackSize + calcLenStack opcode
+      in (newStackSize, max newStackSize maxStackSize)
 
-localVarGenBody :: Stmt -> LocalVarArrType
-localVarGenBody (Block blocks) = concatMap localVarGenBody blocks
-localVarGenBody (Return _) = []
-localVarGenBody (While _ stmt) = localVarGenBody stmt
-localVarGenBody (LocalVarDecl localType localName _) = [(localName, localType)]
-localVarGenBody (If _ stmt mStmt) = localVarGenBody stmt ++ maybe [] localVarGenBody mStmt
-localVarGenBody (StmtOrExprAsStmt _) = []
-localVarGenBody (ThisCall _ _) = []
-localVarGenBody (SuperCall _ _) = []
+calcLenStack :: Int -> Int
+calcLenStack opcode
+  | opcode == 172 = -1 -- ireturn
+  | opcode == 176 = -1 -- areturn
+  | opcode == 153 = -1 -- ifeq
+  | opcode == 154 = -1 -- ifne
+  | opcode == 54 = -1 -- istore
+  | opcode == 58 = -1 -- astore
+  | opcode == 42 = 1 -- aload_0 
+  | opcode == 21 = 1 -- iload 
+  | opcode == 25 = 1 -- aload
+  | opcode == 178 = 1 -- getstatic
+  | opcode == 180 = 1 -- getfield
+  | opcode == 19 = 1 -- ldc_w
+  | opcode == 179 = -1 -- putstatic
+  | opcode == 181 = -1 -- putfield
+  | opcode == 187 = 1 -- new 
+  | opcode == 89 = 1 -- dup 
+  | opcode == 96 = -1 -- iadd 
+  | opcode == 100 = -1 -- isub 
+  | opcode == 104 = -1 -- imul 
+  | opcode == 108 = -1 -- idiv 
+  | opcode == 112 = -1 -- irem 
+  | opcode == 126 = -1 -- iand 
+  | opcode == 128 = -1 -- ior 
+  | opcode == 130 = -1 -- ixor 
+  | opcode == 161 = -2 -- if_icmplt 
+  | opcode == 163 = -2 -- if_icmpgt 
+  | opcode == 3 = 1 -- iconst_0 
+  | opcode == 4 = 1 -- iconst_1
+  | otherwise = 0
 
 codeGenStmt :: (Stmt, LocalVarArrType, CP.SearchFunctions) -> [Int]
 codeGenStmt (Block blocks, localVarArr, sf) = concatMap (\block -> codeGenStmt (block, localVarArr, sf)) blocks
@@ -324,6 +328,31 @@ codeGenLiteral lit@(IntLit _) sf  = splitLenInTwoBytes $ (findLiteral sf) lit
 codeGenLiteral lit@(CharLit _) sf = splitLenInTwoBytes $ (findLiteral sf) lit
 codeGenLiteral (BoolLit bool) _   = if bool then [4] else [3] -- Push directly 1 (4) or 0 (3)
 codeGenLiteral Null _             = []
+
+-- Function and data structure to get all local variables and store the number (index in array) of the local variable -> in order to find them later.
+type LocalVarArrType = [(String, Types.Core.Type)]
+
+localVarGen :: (Bool, [(Type, LocalName)], Stmt) -> LocalVarArrType
+localVarGen (methodStatic, params, body) = do
+  localVarGenMethodStatic methodStatic ++ localVarGenParams params ++ localVarGenBody body
+
+localVarGenMethodStatic :: Bool -> LocalVarArrType
+localVarGenMethodStatic methodStatic = if methodStatic then [] else [("This", Instance "This")]
+
+localVarGenParams :: [(Type, LocalName)] -> LocalVarArrType
+localVarGenParams = map transform
+  where
+    transform (t, name) = (name, t)
+
+localVarGenBody :: Stmt -> LocalVarArrType
+localVarGenBody (Block blocks) = concatMap localVarGenBody blocks
+localVarGenBody (Return _) = []
+localVarGenBody (While _ stmt) = localVarGenBody stmt
+localVarGenBody (LocalVarDecl localType localName _) = [(localName, localType)]
+localVarGenBody (If _ stmt mStmt) = localVarGenBody stmt ++ maybe [] localVarGenBody mStmt
+localVarGenBody (StmtOrExprAsStmt _) = []
+localVarGenBody (ThisCall _ _) = []
+localVarGenBody (SuperCall _ _) = []
 
 getAccessFlags :: (Types.Core.AccessModifier, Bool) -> [Int]
 getAccessFlags (accessFlags, static) =
