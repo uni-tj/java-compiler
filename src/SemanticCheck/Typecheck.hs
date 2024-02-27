@@ -28,6 +28,7 @@ import           Data.Maybe           (fromJust, fromMaybe, isJust, isNothing,
                                        listToMaybe, mapMaybe)
 import           Data.Tuple.Extra     (swap)
 import           Debug.Trace          (traceShow)
+import           Extra                (firstJust, snoc)
 import           Prelude              hiding (EQ, GT, LT, unzip)
 import qualified SemanticCheck.StdLib as StdLib
 import           SemanticCheck.Util
@@ -87,6 +88,10 @@ crbodyL f (AST.Constructor a b c d) = f d <&> AST.Constructor a b c
 
 localsL :: Lens' ExprCtx (Map Identifier Type)
 localsL f (Ctx a b c) = f a <&> \a' -> Ctx a' b c
+
+-- Partial lens on the statements of a block
+stmtsL :: Lens' TAST.Stmt [TAST.Stmt]
+stmtsL fn (TAST.Block a) = fn a <&> TAST.Block
 {- Lens helper end -}
 
 data GlobalCtx = GlobalCtx { cIasses :: [AST.Class], stdLib :: [AST.Class] }
@@ -244,7 +249,7 @@ checkMethod cIass method@AST.Method{ AST.moverride, AST.maccess, AST.mstatic, AS
     TAST.mtype,
     TAST.mname,
     TAST.mparams,
-    TAST.mbody = mbody'
+    TAST.mbody = mbody' & stmtsL %~ applyWhen (mtype == Void) (++[TAST.Return Nothing])
   }
   where locals = Map.fromList $ swap <$> mparams
         -- Search for overridden method in superclasses
@@ -267,7 +272,7 @@ checkConstructor cIass cr@AST.Constructor{ AST.craccess, AST.crparams, AST.crbod
   return TAST.Constructor {
     TAST.craccess,
     TAST.crparams,
-    TAST.crbody = crbody'
+    TAST.crbody = crbody' & stmtsL %~ (++[TAST.Return Nothing])
   }
   where locals = Map.fromList $ swap <$> crparams
         checkReturn :: AST.Stmt -> ExceptState ()
@@ -282,9 +287,7 @@ checkConstructor cIass cr@AST.Constructor{ AST.craccess, AST.crparams, AST.crbod
 
 checkStmt :: ExprCtx -> {-target::-}Type -> AST.Stmt -> ExceptState (TAST.Stmt, {-definiteReturn::-}Bool)
 checkStmt _   target (AST.Block _ []) =
-  if target == Void
-  then return (TAST.Block [TAST.Return Nothing], True)
-  else return (TAST.Block [], False)
+  return (TAST.Block [], False)
 checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ ltype lname minit:stmts)) = do
   minit' <- mapM (checkExpr ctx) minit
   whenJust minit' $ \init' ->
@@ -433,7 +436,7 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr pos (AST.Assign mleft uname righ
       right' <- checkExpr ctx right
       accCtx <- accessCtxM left'
       (fieldCIass, field) <- resolveField ctx accCtx uname
-      checkAssignable (AST.ftype field) left'
+      checkAssignable (AST.ftype field) right'
       return $ TAST.StmtOrExprAsExpr $ TAST.FieldAssign (typee field) left' fieldCIass (static field) uname right'
     asLocal = do
       right' <- checkExpr ctx right
@@ -522,13 +525,19 @@ chooseMostSpecific cIassName (Just (cN1,m1)) m2 = condM
 
 lookupField :: ExprCtx -> AccessCtx -> Identifier -> ExceptState (Maybe (Identifier, AST.Field))
 lookupField exprCtx accCtx fname = do
-  cIass <- resolveClass (name accCtx)
-  mfield <- listToMaybe <$>
-          ( filterM (isAccessible exprCtx cIass)
-          $ filter (hasName fname)
-          $ AST.cfields cIass)
-  whenJust mfield $ checkStatic accCtx
-  return $ (AST.cname cIass,) <$> mfield
+  mfound <- lookupField' (name accCtx)
+  whenJust mfound $ checkStatic accCtx . snd
+  return mfound
+  where
+    lookupField' aname = do
+      cIass <- resolveClass aname
+      minheritedField <- fmap join $ mapM lookupField' $ AST.cextends cIass
+      -- TODO: make more beautiful
+      mfield <- (fmap (AST.cname cIass,) . listToMaybe) <$>
+              ( filterM (isAccessible exprCtx cIass)
+              $ filter (hasName fname)
+              $ AST.cfields cIass)
+      return $ firstJust id [mfield, minheritedField]
 resolveField :: ExprCtx -> AccessCtx -> Identifier ->ExceptState (Identifier, AST.Field)
 resolveField exprCtx accCtx fname =
   liftMaybe ("No accessible field " ++ fname ++ " found on class " ++ name accCtx ++ ".")

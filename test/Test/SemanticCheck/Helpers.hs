@@ -27,7 +27,7 @@ classRefT cname = TAST.ClassRef (Class cname) cname
 
 main :: [AST.Method] -> [AST.Stmt] -> AST.Class
 main ms stmts = AST.Class Public "Main" Nothing [] ms [cons]
-  where cons = AST.Constructor Public "Main" [] $ AST.Block pos (AST.SuperCall pos [] : stmts ++ [AST.Return pos Nothing])
+  where cons = AST.Constructor Public "Main" [] $ AST.Block pos (AST.SuperCall pos [] : stmts)
 mainT :: [TAST.Method] -> [TAST.Stmt] -> TAST.Class
 mainT ms stmts = TAST.Class Public "Main" (Just "java/lang/Object") [] ms [cons]
   where cons = TAST.Constructor Public [] $ TAST.Block (TAST.SuperCall "java/lang/Object" [] : stmts ++ [TAST.Return Nothing])
@@ -71,11 +71,11 @@ newT :: ClassName -> TAST.Constructor -> [TAST.Expr] -> TAST.Expr
 newT cname cr args' = TAST.StmtOrExprAsExpr $ TAST.New (Instance cname) cname $ zip (ptypes cr) args'
 
 block1 :: AST.Stmt -> AST.Stmt
-block1 stmt = AST.Block pos [stmt, AST.Return pos Nothing]
+block1 stmt = AST.Block pos [stmt]
 block1T :: TAST.Stmt -> TAST.Stmt
 block1T stmt = TAST.Block [stmt, TAST.Return Nothing]
 
 emptyBlock :: AST.Stmt
-emptyBlock = AST.Block pos [ AST.Return pos Nothing ]
+emptyBlock = AST.Block pos []
 emptyBlockT :: TAST.Stmt
 emptyBlockT = TAST.Block [ TAST.Return Nothing ]

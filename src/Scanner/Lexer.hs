@@ -189,7 +189,7 @@ indexTokens list = indexTokensRec 1 1 list where
     indexTokensRec _ vpos (NEWLINE : tkns) = indexTokensRec 1 (vpos + 1) tkns
     indexTokensRec hpos vpos (SPACE : tkns) = indexTokensRec (hpos + 1) vpos tkns
     indexTokensRec hpos vpos (tkn : tkns) =
-      PositionedToken { position = Position {start = (hpos, vpos), end = (hpos + tokenLength tkn, vpos)},
+      PositionedToken { position = Position {start = (vpos, hpos), end = (vpos, hpos + tokenLength tkn)},
          token = tkn } : indexTokensRec (hpos + tokenLength tkn) vpos tkns
 
 -- should be redundant, because indexTokens already filters all NEWLINE's

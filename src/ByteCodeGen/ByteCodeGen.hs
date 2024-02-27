@@ -6,15 +6,15 @@
 
 module ByteCodeGen.ByteCodeGen where
 
-import ConstantPool.ConstantPool as CP
+import           ConstantPool.ConstantPool as CP
 import qualified ConstantPool.ConstantPool as CP
-import Data.Bits
-import Data.List (findIndex)
-import Debug.Trace
-import Jvm.Data.ClassFormat
-import qualified Jvm.Data.ClassFormat as CF
-import Types.Core
-import Types.TAST
+import           Data.Bits
+import           Data.List                 (findIndex)
+import           Debug.Trace
+import           Jvm.Data.ClassFormat
+import qualified Jvm.Data.ClassFormat      as CF
+import           Types.Core
+import           Types.TAST
 
 -- Question
 -- 1. What to do with chars?
@@ -64,7 +64,7 @@ createClassFile (classInfo, (sf, (mi, cp))) = do
                     ( (findClass sf)
                         ( case cextends classInfo of
                             Just a -> a
-                            _ -> "java/lang/Object"
+                            _      -> "java/lang/Object"
                         )
                     )
                 },
@@ -165,19 +165,20 @@ codeGenStmt (Return mexpr, localVarArr, sf) = do
     Just expr -> do
       let (exprCode, t) = codeGenExpr (expr, localVarArr, sf)
       case t of
-        Types.Core.Int -> exprCode ++ [172] -- ireturn
-        Types.Core.Bool -> exprCode ++ [172] -- ireturn
-        Types.Core.Char -> exprCode ++ [172] -- ireturn
+        Types.Core.Int                   -> exprCode ++ [172] -- ireturn
+        Types.Core.Bool                  -> exprCode ++ [172] -- ireturn
+        Types.Core.Char                  -> exprCode ++ [172] -- ireturn
         Types.Core.Instance instanceName -> exprCode ++ [176] -- areturn
-        Types.Core.Class className -> error "Class can not be returned"
-        _ -> []
+        Types.Core.Class className       -> error "Class can not be returned"
+        _                                -> []
     Nothing -> [177]
 codeGenStmt (While expr stmt, localVarArr, sf) = do
   -- expr(ending up true/false -> 1 or 0 on stack) --- 153, 0, len(stmt) --- stmt
   let (codeExpr, t) = codeGenExpr (expr, localVarArr, sf)
   let codeStmt = codeGenStmt (stmt, localVarArr, sf)
-  let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 3) -- 153 -> if value is 0, branch -- 3 for offset
-  codeExpr ++ codeWhile ++ codeStmt
+  let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 3 + 3) -- 153 -> if value is 0, branch -- 3 for offset / 2. +3 because of goto at the end
+  let whileCode = codeExpr ++ codeWhile ++ codeStmt
+  whileCode ++ [167] ++ (splitLenInTwoBytes (negate (length(whileCode))))
 codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr, sf) = do
   let i = findIndex ((== localName) . fst) localVarArr
   case mexpr of
@@ -206,10 +207,10 @@ codeGenStmt (If expr stmt mStmt, localVarArr, sf) =
       codeStmt = codeGenStmt (stmt, localVarArr, sf)
       codeElseStmt = case mStmt of
         Just elseStmt -> codeGenStmt (elseStmt, localVarArr, sf)
-        Nothing -> []
+        Nothing       -> []
    in if length codeElseStmt > 0
         then -- +3 because of added goto --- [167] ++ splitLenInTwoBytes (length codeElseStmt) -> goto to overjump else when if is taken
-          codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3 + 3) ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt + 3) ++ codeElseStmt
+          codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3 + 3) ++ codeStmt ++ [167] ++ splitLenInTwoBytes (length codeElseStmt + 3) ++ codeElseStmt ++ [0]
         else codeExpr ++ [153] ++ splitLenInTwoBytes (length codeStmt + 3) ++ codeStmt
 codeGenStmt (ThisCall className paras, localVarArr, sf) = do
   let codeParas = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr, sf))) paras
@@ -254,10 +255,10 @@ codeGenExpr (Binary typeBinary binOperator expr0 expr1, localVarArr, sf) = do
   (codeExpr0 ++ codeExpr1 ++ codeBinOperator, typeBinary)
 codeGenExpr (Literal literalType literal, localVarArr, sf) = do
   case literalType of
-    Types.Core.Int -> (19 : codeGenLiteral literal sf, literalType)
+    Types.Core.Int  -> (19 : codeGenLiteral literal sf, literalType)
     Types.Core.Bool -> (codeGenLiteral literal sf, literalType)
     Types.Core.Char -> (19 : codeGenLiteral literal sf, literalType)
-    _ -> ([], NullType)
+    _               -> ([], NullType)
 codeGenExpr (StmtOrExprAsExpr stmtOrExpr, localVarArr, sf) = codeGenStmtOrExpr (stmtOrExpr, localVarArr, sf)
 
 codeGenStmtOrExpr :: (StmtOrExpr, LocalVarArrType, CP.SearchFunctions) -> ([Int], Types.Core.Type)
@@ -268,12 +269,12 @@ codeGenStmtOrExpr (LocalAssign varType varName expr, localVarArr, sf) = do
   case i of
     Just index ->
       let codeStore = case varType of
-            Types.Core.Int -> [196, 54]
-            Types.Core.Bool -> [196, 54]
-            Types.Core.Char -> [196, 54]
+            Types.Core.Int                   -> [196, 54]
+            Types.Core.Bool                  -> [196, 54]
+            Types.Core.Char                  -> [196, 54]
             Types.Core.Instance instanceName -> [196, 58]
-            Types.Core.Class className -> error "Can assign Class to var"
-            _ -> []
+            Types.Core.Class className       -> error "Can assign Class to var"
+            _                                -> []
        in (exprCode ++ codeStore ++ splitLenInTwoBytes index, varType)
     Nothing -> ([], NullType)
 codeGenStmtOrExpr (a@(FieldAssign varType tagetExpr className static fieldName valueExpr), localVarArr, sf) = do
@@ -299,38 +300,38 @@ codeGenStmtOrExpr (m@(MethodCall methodType expr className static methodName par
   (codeExpr ++ codeParas ++ codeInvoke, methodType)
 
 codeGenBinOperator :: BinOperator -> [Int]
-codeGenBinOperator Add = [96]
-codeGenBinOperator Sub = [100]
-codeGenBinOperator Mul = [104]
-codeGenBinOperator Div = [108]
-codeGenBinOperator Mod = [112] -- logical int remainder
-codeGenBinOperator LAnd = [126]
-codeGenBinOperator LOr = [128]
+codeGenBinOperator Add           = [96]
+codeGenBinOperator Sub           = [100]
+codeGenBinOperator Mul           = [104]
+codeGenBinOperator Div           = [108]
+codeGenBinOperator Mod           = [112] -- logical int remainder
+codeGenBinOperator LAnd          = [126]
+codeGenBinOperator LOr           = [128]
 codeGenBinOperator Types.Core.LT = [161, 0, 7, 3, 167, 0, 4, 4] -- IF_ICMPLT label, ICONST_0, GOTO end, label:, ICONST_1
-codeGenBinOperator LTE = [163, 0, 7, 4, 167, 0, 4, 3] -- IF_ICMPGT label, ICONST_1, GOTO end, label:, ICONST_0
+codeGenBinOperator LTE           = [163, 0, 7, 4, 167, 0, 4, 3] -- IF_ICMPGT label, ICONST_1, GOTO end, label:, ICONST_0
 codeGenBinOperator Types.Core.GT = [163, 0, 7, 3, 167, 0, 4, 4] -- IF_ICMPGT label, ICONST_0, GOTO end, label:, ICONST_1
-codeGenBinOperator GTE = [161, 0, 7, 4, 167, 0, 4, 3] -- IF_ICMPLT label, ICONST_1, GOTO end, label:, ICONST_0
+codeGenBinOperator GTE           = [161, 0, 7, 4, 167, 0, 4, 3] -- IF_ICMPLT label, ICONST_1, GOTO end, label:, ICONST_0
 codeGenBinOperator Types.Core.EQ = [100, 153, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifeq label, ICONST_0, GOTO end, label:, ICONST_1
-codeGenBinOperator NEQ = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, ICONST_0, GOTO end, label:, ICONST_1
+codeGenBinOperator NEQ           = [100, 154, 0, 7, 3, 167, 0, 4, 4] -- iSub, ifne label, ICONST_0, GOTO end, label:, ICONST_1
 
 codeGenUnOparator :: UnOparator -> [Int]
-codeGenUnOparator Plus = [] -- -> Do nothing
+codeGenUnOparator Plus  = [] -- -> Do nothing
 codeGenUnOparator Minus = [116] -- -> Use INEG
-codeGenUnOparator LNot = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
+codeGenUnOparator LNot  = [4, 130] -- Expr must already be on the stack - push 1 -- oxr Expr(1/0) and 1 -> Bit toggel
 
 codeGenLiteral :: Literal -> CP.SearchFunctions -> [Int]
-codeGenLiteral lit@(IntLit _) sf = splitLenInTwoBytes $ (findLiteral sf) lit
+codeGenLiteral lit@(IntLit _) sf  = splitLenInTwoBytes $ (findLiteral sf) lit
 codeGenLiteral lit@(CharLit _) sf = splitLenInTwoBytes $ (findLiteral sf) lit
-codeGenLiteral (BoolLit bool) _ = if bool then [4] else [3] -- Push directly 1 (4) or 0 (3)
-codeGenLiteral Null _ = []
+codeGenLiteral (BoolLit bool) _   = if bool then [4] else [3] -- Push directly 1 (4) or 0 (3)
+codeGenLiteral Null _             = []
 
 getAccessFlags :: (Types.Core.AccessModifier, Bool) -> [Int]
 getAccessFlags (accessFlags, static) =
   case accessFlags of
-    Types.Core.Public -> 1 : staticFlag
-    Types.Core.Private -> 2 : staticFlag
+    Types.Core.Public    -> 1 : staticFlag
+    Types.Core.Private   -> 2 : staticFlag
     Types.Core.Protected -> 4 : staticFlag
-    _ -> staticFlag
+    _                    -> staticFlag
   where
     staticFlag = if static then [8] else []
 

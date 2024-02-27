@@ -2,6 +2,7 @@
 *~
 JavaCompiler.cabal
 stack.yaml.lock
+*.class
 
 .vscode
 .DS_Store

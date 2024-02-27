@@ -1,43 +1,28 @@
-class Main {
-  Main() {
-    return;
+public class Main {
+  // static int ggT(int a, int b) {
+  // if (a >= b) {
+  // a = 19;
+  // return a;
+  // // goto after else
+  // } else {
+  // // return a;
+  // return a; // ggT(a + 1, b);
+  // }
+  // // node code
+  // }
+  static int ggT(int a, int b) {
+    if (a == b)
+      return (a);
+    else {
+      if (a > b)
+        return (ggT(a - b, b));
+      else
+        return (ggT(b - a, a));
+    }
   }
 
   public static void main(String[] args) {
-    int b = 0;
-    Cl2 x = new Cl2();
-    System.out.println(x.m2(x.v, b));
-    return;
+    int number = ggT(33, 11);
+    System.out.println(number);
   }
-
-}
-
-class Cl1 {
-  Cl1() {
-    return;
-  }
-
-  char m1() {
-    int b = 0;
-    Cl2 x = new Cl2();
-    return x.m2(x.v, b);
-  }
-}
-
-class Cl2 {
-  Cl2() {
-    return;
-  }
-
-  Cl3 v;
-  char m2(Cl3 v, int w) {
-    return 'a';
-  }
-}
-
-class Cl3 {
-  Cl3() {
-    return;
-  }
-
 }
