@@ -108,11 +108,12 @@ createAttributeCode (methodStatic, params, body, sf) = do
   let indexNameAttr = (findName sf) "Code"
   let localVarArr = localVarGen (methodStatic, params, body)
   let methodCode = codeGenStmt (body, localVarArr, sf)
+  let stackSize = calcMaxStackSize methodCode
 
   AttributeCode
     { index_name_attr = indexNameAttr,
       tam_len_attr = length methodCode + 12, -- it is always + 12 because we dont have array_ex_attr ect.
-      len_stack_attr = calcMaxStackSize methodCode,
+      len_stack_attr = stackSize,
       len_local_attr = length localVarArr,
       tam_code_attr = length methodCode,
       array_code_attr = methodCode,
@@ -142,7 +143,7 @@ codeGenStmt (While expr stmt, localVarArr, sf) = do
   let codeStmt = codeGenStmt (stmt, localVarArr, sf)
   let codeWhile = 153 : splitLenInTwoBytes (length codeStmt + 3 + 3) -- 153 -> if value is 0, branch -- 3 for offset / 2. +3 because of goto at the end
   let whileCode = codeExpr ++ codeWhile ++ codeStmt
-  whileCode ++ [167] ++ (splitLenInTwoBytes (negate (length(whileCode))))
+  whileCode ++ [167] ++ (splitLenInTwoBytes (negate (length(whileCode)))) -- code for jumping to the top of the loop
 codeGenStmt (LocalVarDecl varType localName mexpr, localVarArr, sf) = do
   let i = findIndex ((== localName) . fst) localVarArr
   case mexpr of
@@ -189,7 +190,7 @@ codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr, sf) = do
   codeStmtOrExpr
 
 codeGenExpr :: (Expr, LocalVarArrType, CP.SearchFunctions) -> ([Int], Type)
-codeGenExpr (This thisType, localVarArr, sf) = ([42], thisType) -- Aload_0
+codeGenExpr (This thisType, localVarArr, sf) = ([42], thisType) -- Aload_0 -> This is always at position 0
 codeGenExpr (Super superName, localVarArr, sf) = ([], NullType)
 codeGenExpr (LocalVar localVarType localVarName, localVarArr, sf) = do
   let i = findIndex ((== localVarName) . fst) localVarArr
