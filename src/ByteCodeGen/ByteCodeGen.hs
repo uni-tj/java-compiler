@@ -16,12 +16,6 @@ import           Jvm.Data.ClassFormat
 import           Types.Core
 import           Types.TAST
 
--- Doku
--- Wie kann man den Code einzeln anschauen
--- Tests schreiben und zeigen wie man Tests ausführen
--- Was hat man sich gedacht bei z.B. max stack gedacht
--- Pro Person ca. 1 Seite
-
 codeGen :: [(Class, (CP.SearchFunctions, CP.MICP))] -> [ClassFile]
 codeGen classList = do
   let classFileObjects = map createClassFile classList
