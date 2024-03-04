@@ -113,13 +113,13 @@ lexInLineComment (_ : xs) = lexInLineComment xs
 filterTokens :: [Token] -> [Token]
 filterTokens = filter (/= NEWLINE)
 
-tokenLength :: Token -> Integer
+tokenLength :: Token -> Int
 tokenLength (CHARLITERAL ch) | isSpace ch = 2 --in case of escape characters '\n', '\t', ...
                              | otherwise = 1  --standard character
 tokenLength tkn = case tkn of
-         (WRONGTOKEN _ len)   -> toInteger len
-         (IDENTIFIER str)     -> toInteger (length str)
-         (INTLITERAL x)       -> toInteger (length (show x))
+         (WRONGTOKEN _ len)   -> len
+         (IDENTIFIER str)     -> (length str)
+         (INTLITERAL x)       -> (length (show x))
          PUBLIC               -> 6
          PROTECTED            -> 9
          PRIVATE              -> 7

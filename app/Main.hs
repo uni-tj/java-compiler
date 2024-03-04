@@ -33,7 +33,7 @@ compile = do
   when debug $ do
     print "Parser output:"
     print ast
-  let tast = typecheck ast
+  let tast = typecheck (lines file) ast
   when debug $ do
     print "Typecheck output:"
     print tast

@@ -18,7 +18,8 @@ This is intentional to ensure its usability even if we decide to implement more 
 Todos:
 
 - check variable redeclarations (in nested blocks)
-- position errors?
+- position errors
+- field override is subtype check
 
 Features:
 
