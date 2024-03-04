@@ -8,7 +8,7 @@ scanner :: String -> [PositionedToken]
 scanner = lexWithIndex
 
 lexWithIndex :: String -> [PositionedToken]
-lexWithIndex = filterIndexedTokens . indexTokens . validateTokens . lexer
+lexWithIndex =  indexTokens . validateTokens . lexer
 
 lexWithoutIndex :: String -> [Token]
 lexWithoutIndex = filterTokens . validateTokens . lexer
@@ -158,10 +158,6 @@ indexTokens list = indexTokensRec 1 1 list where
       PositionedToken { position = Position {start = (vpos, hpos), end = (vpos, hpos + tokenLength tkn)},
          token = tkn } : indexTokensRec (hpos + tokenLength tkn) vpos tkns
 
--- should be redundant, because indexTokens already filters all NEWLINE's
-filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
-filterIndexedTokens =
-   filter (\posTkn -> token posTkn /= NEWLINE && token posTkn /= SPACE)
 
 
 -- final validation before carrying on with parsing
