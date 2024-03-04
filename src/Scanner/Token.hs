@@ -2,7 +2,6 @@ module Scanner.Token (Token(..), PositionedToken(..)) where
 
 import Types.AST -- to access Position type
 
-
 data Token
      = IDENTIFIER String        -- id 
      | INTLITERAL Integer       -- num
@@ -10,14 +9,11 @@ data Token
      | RBRACKET                 -- }
      | LBRACE                   -- (
      | RBRACE                   -- )
-     | LSQRBRACKET              -- [ (?) (-> arrays) 
-     | RSQRBRACKET              -- ] (?) (-> arrays)
-     | TILDE                    -- ~     (-> bitwise not)
+     | LSQRBRACKET              -- [ 
+     | RSQRBRACKET              -- ]
      | EXCLMARK                 -- !
-     | QUESMARK                 -- ? (?) (-> ternary operator)
      | DOT                      -- . 
      | SEMICOLON                -- ;
-     | COLON                    -- :
      | COMMA                    -- ,
      | PLUS                     -- +
      | MINUS                    -- -
@@ -26,10 +22,6 @@ data Token
      | MOD                      -- %
      | LESS                     -- <
      | GREATER                  -- >
-     | LOGICALOR                -- |
-     | SHIFTLEFT                -- <<
-     | SIGNEDSHIFTRIGHT         -- >>
-     | UNSIGNEDSHIFTRIGHT       -- >>>
      
      | OVERRIDE                 -- @Override
 
@@ -37,9 +29,8 @@ data Token
      | PROTECTED                -- protected
      | PRIVATE                  -- private
      | STATIC                   -- static
-     | ABSTRACT                 -- abstract
 
-     | EXTENDS
+     | EXTENDS                  -- extends
 
      | CLASS                    -- class
      | THIS                     -- this
@@ -52,42 +43,21 @@ data Token
      | VOID                     -- void
      | BOOLEAN                  -- boolean
      | INT                      -- int
-     | STRING                   -- String
+     | STRING                   -- String (leads to an error while scanning)
 
      | IF                       -- if
      | WHILE                    -- while 
      | ELSE                     -- else
-     | CASE                     -- case     (not to implement)
-     | BREAK                    -- break    (not to implement)
-     | CONTINUE                 -- continue (not to implement)
-     | FOR                      -- for
 
      | RETURN                   -- return 
 
      | EQUAL                    -- == 
      | NOTEQUAL                 -- !=
-     | TIMESEQUAL               -- *=
-     | DIVIDEEQUAL              -- /=
-     | MODULOEQUAL              -- %=
-     | PLUSEQUAL                -- +=
-     | MINUSEQUAL               -- -=
-     | ANDEQUAL                 -- &=
-     | XOREQUAL                 -- ^=
-     | OREQUAL                  -- |=
      | LESSEQUAL                -- <=
      | GREATEREQUAL             -- >=
-     | SHIFTLEFTEQUAL           -- <<=
-     | SIGNEDSHIFTRIGHTEQUAL    -- >>=
-     | UNSIGNEDSHIFTRIGHTEQUAL  -- >>>=
-
-     | INSTANCEOF               -- instanceof(Type)
-
-     | INCREMENT                -- ++ (not to Implement)
-     | DECREMENT                -- -- (not to implement)
 
      | AND                      -- &&
      | OR                       -- ||
-     | XOR                      -- ^ (not to implement)
 
      | BOOLLITERAL Bool         -- true | false
      | CHARLITERAL Char         -- '..'
@@ -95,7 +65,7 @@ data Token
      | JNULL                    -- null
 
      | NEWLINE                  -- temporally holds information about positions
-     | SPACE 
+     | SPACE                    -- also for positioning
      | WRONGTOKEN String Int    -- error token with message and original size
      deriving (Show, Eq)
 
@@ -105,4 +75,4 @@ data PositionedToken = PositionedToken
  { position :: Position, token :: Token }
 
 instance Show PositionedToken where
-     show (PositionedToken _ t) = show t
+     show (PositionedToken pos tokn) = " token: " ++ show tokn ++ " at: " ++ show pos

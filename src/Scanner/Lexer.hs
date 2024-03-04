@@ -41,7 +41,6 @@ lexer (']':cs) = RSQRBRACKET : lexer cs
 lexer ('!':cs) = EXCLMARK : lexer cs
 lexer ('.':cs) = DOT : lexer cs
 lexer (';':cs) = SEMICOLON : lexer cs
-lexer (':':cs) = COLON : lexer cs
 lexer (',':cs) = COMMA : lexer cs
 lexer ('+':cs) = PLUS : lexer cs
 lexer ('-':cs) = MINUS : lexer cs
@@ -55,39 +54,14 @@ lexer ('|' : '|' : cs) = OR : lexer cs
 lexer ('=':cs) = ASSIGN : lexer cs
 lexer ('@':'O':'v':'e':'r':'r':'i':'d':'e': cs) = OVERRIDE : lexer cs
 
-lexer (someChar : cs) = WRONGTOKEN ("token not supported :" ++ [someChar]) 1 : lexer cs
-
-{-- <unsupported tokens>:
-lexer ('+':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('-':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('&':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('|':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('/':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('*':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('%':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('^':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('|':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('^':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('&':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('?':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('~':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('<':'<':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('>':'>':'=':cs) =WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('>':'>':'>':'=':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('<':'<':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('>':'>':'>':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer ('>':'>':cs) = WRONGTOKEN "not supported" 2 : lexer cs
-lexer (':' : cs) = WRONGTOKEN "not supported" 1 : lexer cs
-lexer ('+':'+':cs) = INCREMENT : lexer cs
-lexer ('-':'-':cs) = DECREMENT : lexer cs
--- </unsupported tokens> -}
+lexer (someChar : cs) = WRONGTOKEN ("token not supported :" ++ [someChar]) 1 : lexer cs -- to make pattern match exhaustive
 
 
 lexNum :: String -> [Token]
 lexNum cs = INTLITERAL (read num) : lexer rest
       where (num,rest) = span isDigit cs
 
--- this will lead to an error after while scanning
+-- this will lead to an error later, while scanning
 lexStr :: String -> [Token]
 lexStr cs = STRINGLITERAL (read str) : lexer rest
        where (str,rest) = span ('"' /=) cs
@@ -119,20 +93,13 @@ lexVar cs =
       ("extends", rest)    -> EXTENDS : lexer rest
       (var,rest)           -> IDENTIFIER var : lexer rest
 
--- unsupported tokens
-   -- ("for", rest) -> FOR : lexer rest
-   -- ("case",rest) -> CASE : lexer rest
-   -- ("break",rest) -> BREAK : lexer rest
-   -- ("instanceof",rest) -> INSTANCEOF : lexer rest
-   -- ("abstract",rest) -> ABSTRACT : lexer rest
 
 -- comments -- 
-
 lexMulLineComment :: String -> [Token]
 lexMulLineComment ('*' : '/' : xs) = lexer xs
 lexMulLineComment ('\n' : xs) = NEWLINE : lexMulLineComment xs
 lexMulLineComment (_ : xs) = lexMulLineComment xs
-lexMulLineComment [] = error "unclosed multi line comment"
+lexMulLineComment [] = error "unclosed multi line comment" -- scanner error when a comment is not closed
 
 lexInLineComment :: String -> [Token]
 lexInLineComment [] = []
@@ -169,7 +136,6 @@ tokenLength tkn = case tkn of
          IF                   -> 2
          WHILE                -> 5
          ELSE                 -> 4
-         FOR                  -> 3
          RETURN               -> 6
          EQUAL                -> 2
          NOTEQUAL             -> 2
@@ -178,7 +144,7 @@ tokenLength tkn = case tkn of
          (BOOLLITERAL tr)     -> if tr then 4 else 5
          JNULL                -> 4
          OVERRIDE             -> 8
-         _                    -> 1
+         _                    -> 1 -- make pattern match exhaustive
 
 
 -- indexing Tokens based on occurences of NEWLINE token (will be removed)
@@ -197,16 +163,16 @@ filterIndexedTokens :: [PositionedToken] -> [PositionedToken]
 filterIndexedTokens =
    filter (\posTkn -> token posTkn /= NEWLINE && token posTkn /= SPACE)
 
--- final validation before carrying on with parsing
 
+-- final validation before carrying on with parsing
 isValidInt :: Integer -> Bool
 isValidInt num = (num <= 2147483647) && (num >= -2147483648)
 
 validateTokens :: [Token] -> [Token]
 validateTokens [] = []
 validateTokens ((INTLITERAL x) : tkns) = if isValidInt x then INTLITERAL x : validateTokens tkns else
-   error (show x ++ " is out of range for int")
+   error (show x ++ " is out of range for int") -- throw an error for too |large| int-literals
 validateTokens ((STRINGLITERAL str) : _) =
-   error ("strings not supported yet :" ++ str)
+   error ("strings not supported yet :" ++ str) -- throw an error, when strings occur
 validateTokens ((WRONGTOKEN msg _) : _) = error msg
 validateTokens (tkn : tkns) = tkn : validateTokens tkns
