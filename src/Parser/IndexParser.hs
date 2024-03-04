@@ -74,17 +74,20 @@ getPosFromExpr expr = case expr of
 
 
 {-----------------------------------------------------------------------------}
-{-- # main functionalities -}
+{-- # main functionalities # --}
 {-----------------------------------------------------------------------------}
 
 --AIO parser and scanner
 completeParser :: String -> Either String Program 
 completeParser = parser . scanner
 
---parser only
+--parser only (rename for main function)
 parser :: [PositionedToken] -> Either String Program
 parser = tokenParser
 
+-- parser
+-- if there were correct solutions it will show these,
+-- otherwise the remaining tokens are displayed
 tokenParser :: [PositionedToken] -> Either String Program
 tokenParser input =
     let parsed = parseProgram input
@@ -94,10 +97,12 @@ tokenParser input =
             if null correctSolutions then Left (remaining parsed)
             else Right (fst (head (correctSols (parseProgram input))))
 
+-- shows the remaining tokens (used if there were no correct solutions)
 remaining :: Show b => [(a, [b])] -> String 
 remaining ((_, [b]) : xs) = "error on tokens: " ++ show b
-remaining _ = " ";
+remaining _ = " "
 
+-- filters the parser ouptut to only solutions without remaining tokens
 correctSols :: [(t, [a])] -> [(t, [a])]
 correctSols = filter (\(_, resttokens) -> null resttokens)
 
@@ -109,7 +114,6 @@ correctSols = filter (\(_, resttokens) -> null resttokens)
 {- 
     Program = e | Class : e
 -}
-
 parseProgram :: Parser PositionedToken Program
 parseProgram = many parseClass
 
@@ -166,7 +170,10 @@ parseClassEntry =     (parseMethodDecl      <<< ClassMethod)
 {-- # Constructors -----------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-
+{-
+    ConstructorDecl = Visibility : ClassName : '(' : MethodParams : ')' : '{' : ThisOrSuperCall : Stmts : '}'
+                    | Visibility : ClassName : '(' : MethodParams : ')' : '{' : Stmts '}'
+-}
 parseConstructorDecl :: Parser PositionedToken Types.AST.Constructor
 parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ 
                             posLexem LBRACKET +.+ parseThisOrSuperCall +.+ parseStmts +.+ posLexem RBRACKET)
@@ -176,6 +183,10 @@ parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRA
                             <<< (\(vis, (name, (_, (params, (_, body)))))
                                 -> Types.AST.Constructor {craccess = vis, crname = fst name, crparams = params, crbody = body}))
 
+{- 
+    ThisOrSuperCall = 'this' : '(' : CallParams : ')'
+                    | 'super' : '(' : CallParams : ')'
+-}
 parseThisOrSuperCall :: Parser PositionedToken  [Stmt]
 parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
                             <<< \(pos1, (_, (params, rb))) 
@@ -189,19 +200,19 @@ parseThisOrSuperCall =    ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParam
 {-- # Methods ----------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-{-  static flag, reduces to bool, weather token is present or not
+{- 
     Static = e | 'static'
 -}
 parseStatic :: Parser PositionedToken Bool -- rename to parseStatic
 parseStatic = (posLexem STATIC <<< const True) ||| succeed False
 
-{-  override annotation, recudes to bool, weather token is present or not
+{-  
     Override = e | '@Override'
 -}
 parseOverride :: Parser PositionedToken Bool 
 parseOverride = (posLexem OVERRIDE <<< const True) ||| succeed False
 
-{-  method declaration, reduces to Types.AST.Method
+{- 
     MthdDeclaration = Visibility : Static : Type : Name : '(' : MthdParams :  ')' : Block 
                     | Visibility : Name : '(' : MthdParams : ')' : Block 
 -}
@@ -215,7 +226,6 @@ parseMethodDecl = (parseOverride +.+ parseVisibility +.+ parseStatic +.+ parseTy
 {-
     MthdParams = e | Type : Name | Type : Name : ',' : MthdParams
 -}
---parsing method parameters
 parseMethodParams :: Parser PositionedToken [(Type, LocalName)]
 parseMethodParams =     succeed []
                     ||| ((parseType +.+ parseIdentifier)
@@ -250,23 +260,14 @@ parseFieldDecl =     ((parseOverride +.+ parseVisibility +.+ parseStatic +.+ par
 {-  
     Statement = Return | Block | While | LocalVarDecl | If | StmtOrExpr
 -}
-
 parseStmt :: Parser PositionedToken Stmt
 parseStmt =     parseReturn
             ||| parseBlock
             ||| parseWhile
- --         ||| parseForLoop
             ||| parseLocalVarDecl
             ||| parseIf
             ||| parseStmtOrExprAsStmt
- --         ||| parseThisOrSuperCall
             ||| parseEmptyStmt
-
-{-
-parseSingletonStmt :: Parser PositionedToken Stmt
-parseSingletonStmt =     parseLocalVarDecl
-                     ||| (parseStmtOrExpr <<< \(soe,pos) -> StmtOrExprAsStmt pos soe)
--}
 
 {-
     Stmts = e | Stmt | Stmt : Stmts
@@ -299,22 +300,11 @@ parseWhile :: Parser PositionedToken Stmt
 parseWhile = (posLexem WHILE +.+ parseExpr +.+ parseStmt)
                 <<< (\(while, (expr, stmt))
                     -> While (spanPos (position while) (getPosFromStmt stmt)) expr stmt)
-{-
-parseForLoop :: Parser PositionedToken Stmt
-parseForLoop = (posLexem FOR +.+ posLexem LBRACE +.+ parseSingletonStmt +.+ posLexem SEMICOLON +.+ parseExpr
-                +.+ posLexem SEMICOLON +.+ parseSingletonStmt +.+ posLexem RBRACE +.+ parseStmt)
-                    <<< \(for, (_, (stmt1, (_, (bexpr, (_, (stmt3, (_, block))))))))
-                        ->  let pos = spanPos (position for) (getPosFromStmt block)
-                                blockPos = getPosFromStmt block in
-                                Block pos [stmt1, While pos bexpr (Block blockPos [block,stmt3])]
--}
 
 {-
-    LocalVarDecl = Type : LocalName : ';' 
+    LocalVarDecl = Type : LocalName : ';'
                  | Type : LocalName : '=' : Expr : ';'
 -}
-
--- note: parameter of (INTLITERAL __) is ignored
 parseLocalVarDecl :: Parser PositionedToken Stmt
 parseLocalVarDecl =     ((parseType +.+ parseLocalName +.+ posLexem SEMICOLON)
                             <<< (\((tpe, pos1), ((name, _), semicolon))
@@ -342,15 +332,11 @@ parseIf =     ((posLexem IF +.+ parseExpr +.+ parseStmt)
 -}
 parseStmtOrExprAsStmt :: Parser PositionedToken Stmt
 parseStmtOrExprAsStmt = (parseStmtOrExpr +.+ posLexem SEMICOLON) <<< (\((stOrEx, pos1), semicolon) -> StmtOrExprAsStmt (spanPos pos1 (position semicolon)) stOrEx)
+
+-- note: empty Statement, denoted as ';' will be parsed as an empty Block in AST
 {-
-parseThisOrSuperCall :: Parser PositionedToken Stmt 
-parseThisOrSuperCall =     ((posLexem THIS +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) 
-                            <<< \(this, (_, (params, rb))) -> ThisCall params)
-
-                       ||| ((posLexem SUPER +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
-                            <<< \(super, (_, (params, rb))) -> SuperCall params)
+    EmptyStmt = ';' 
 -}
-
 parseEmptyStmt :: Parser PositionedToken Stmt 
 parseEmptyStmt = posLexem SEMICOLON <<< \semicolon -> Block (position semicolon) []
 
@@ -358,14 +344,18 @@ parseEmptyStmt = posLexem SEMICOLON <<< \semicolon -> Block (position semicolon)
 {-- # StmtOrExpr -------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
-
+{-
+    StmtOrExpr = Assignment | New | MethodCall
+-}
 parseStmtOrExpr :: Parser PositionedToken (StmtOrExpr, Position)
-
 parseStmtOrExpr =     parseAssignment
                   ||| parseNew
                   ||| parseMethodCall
 
---left of dot only name as expression allowed
+{-
+    Assignment = LocalName : '=' : Expr 
+               | Expr : '.' : FieldName : '=' : Expr
+-}
 parseAssignment :: Parser PositionedToken (StmtOrExpr, Position)
 parseAssignment =     ((parseLocalName +.+ posLexem ASSIGN +.+ parseExpr)
                         <<< (\((varName, pos1), (_, expr)) -> (Assign Nothing varName expr, spanPos pos1 (getPosFromExpr expr))))
@@ -373,11 +363,18 @@ parseAssignment =     ((parseLocalName +.+ posLexem ASSIGN +.+ parseExpr)
                   ||| ((parseExpr +.+ posLexem DOT +.+ parseFieldName +.+ posLexem ASSIGN +.+ parseExpr)
                         <<< (\(expr1, (_, ((fn, _), (_, expr2)))) -> (Assign (Just expr1) fn expr2, spanPos (getPosFromExpr expr1) (getPosFromExpr expr2))))
 
+{-
+    New = 'new' : '(' : CallParams : ')'
+-}
 parseNew :: Parser PositionedToken (StmtOrExpr, Position)
 parseNew = (posLexem NEW +.+ parseClassName +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
             <<< (\(new, ((name, _), (_, (callParams, rb)))) -> (New name callParams, makePos new rb))
 
 
+{-
+    MethodCall = MethodName : '(' : CallParams : ')'
+               | Expr : '.' : MethodName : '(' : CallParams : ')'
+-}
 parseMethodCall :: Parser PositionedToken (StmtOrExpr, Position)
 parseMethodCall = ((parseMethodName +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE)
                     <<< (\((name, pos1), (_, (callParams, rb)))
@@ -387,7 +384,9 @@ parseMethodCall = ((parseMethodName +.+ posLexem LBRACE +.+ parseCallParams +.+ 
                     <<< (\(expr, (_, ((mthName,_), (_, (callParams, rb)))))
                         -> (MethodCall (Just expr) mthName callParams, spanPos (getPosFromExpr expr) (position rb))))
 
-
+{-
+    CallParams = e | Expr | Expr : ',' : CallParams 
+-}
 parseCallParams :: Parser PositionedToken [Expr]
 parseCallParams =      succeed []
                   ||| (parseExpr <<< (: []))
@@ -398,18 +397,18 @@ parseCallParams =      succeed []
 {-- # Expression -------------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
--- temporary type to hold the right side of an expression (where left rec would occur)
+-- temporary type to hold the right side of an expression (where left recursion would occur)
 data RightSideExpr  = RSbExpr BinOperator Expr -- Right Side binary expression
                     | RSfaExpr Position String          -- Right Side field access
                     | RSmc Position String [Expr]       -- Right Side method call 
                     | RSassign Position String Expr     -- Right Side Assign
-                    | Chain RightSideExpr RightSideExpr -- chain of field-accesses a.b.c....
+                    | Chain RightSideExpr RightSideExpr -- chain of field-accesses (a.b.c....)
 
 -- evals to true, if first opeartor binds more than second one
 binopCompare :: BinOperator -> BinOperator -> Bool
 binopCompare op1 op2 = mapBinopPrecedence op1 < mapBinopPrecedence op2
 
--- a smaller value means the operator binds stronger
+-- note: a smaller value means the operator binds stronger
 mapBinopPrecedence :: BinOperator -> Int
 mapBinopPrecedence op = case op of
         Mul -> 1
@@ -428,9 +427,8 @@ mapBinopPrecedence op = case op of
 
 -- deconstruction of the right side of an expression (with correct operator presedence)
 resolveRightSideExpr :: Expr -> RightSideExpr -> Expr
-
 resolveRightSideExpr expr (RSbExpr lop (Binary pos rop ls rs)) | binopCompare lop rop = Binary (spanPos (getPosFromExpr expr) pos) rop (Binary pos lop expr ls) rs
-                                                               | otherwise = Binary (spanPos (getPosFromExpr expr) pos) lop expr (Binary pos rop ls rs)
+                                                               | otherwise = Binary (spanPos (getPosFromExpr expr) pos) lop expr (Binary pos rop ls rs)  
 resolveRightSideExpr expr rightSideExpr = case rightSideExpr of
         (RSbExpr binop rexpr) -> Binary (spanPos (getPosFromExpr expr) (getPosFromExpr rexpr)) binop expr rexpr
         (RSfaExpr pos2 fldName) -> FieldAccess (spanPos (getPosFromExpr expr) pos2) expr fldName
@@ -439,21 +437,34 @@ resolveRightSideExpr expr rightSideExpr = case rightSideExpr of
         (Chain rsExpr1 rsExpr2) -> resolveRightSideExpr (resolveRightSideExpr expr rsExpr1) rsExpr2
 
 --terminating expressions
+{-
+    TExpr = This | Super | Name | Unary | LiteralExpr | StmtOrExprEasyCase | BraceExpr 
+-}
 parseTExpr :: Parser PositionedToken Expr
 parseTExpr =    parseThis
             ||| parseSuper
             ||| parseName
             ||| parseUnary
             ||| parseLiteralExpr
-            ||| parseStmtOrExprEasy
+            ||| parseStmtOrExprEasycase
             ||| parseBraceExpr
 
 -- general expressions
+{-
+    Expr = TExpr : Expr' | Texpr
+-}
 parseExpr :: Parser PositionedToken Expr
 parseExpr =     ((parseTExpr +.+ parseExpr') <<< uncurry resolveRightSideExpr)
              ||| parseTExpr
 
 -- right side expressions
+{-
+    Expr' =  BinOp : Expr 
+          | '.' : FieldName 
+          | '.' : MethodName : '(' : CallParams : ')' 
+          | '.' : FieldName : '=' : Expr 
+          | '.' : FieldName : Expr'
+-}
 parseExpr' :: Parser PositionedToken RightSideExpr
 parseExpr' =     ((parseBinOp +.+ parseExpr)                                                                         -- + expr
                     <<< uncurry RSbExpr)
@@ -465,42 +476,54 @@ parseExpr' =     ((parseBinOp +.+ parseExpr)                                    
                     <<< \(dot, ((fldName, _) , (_, expr))) -> RSassign (spanPos (position dot) (getPosFromExpr expr)) fldName expr)
              ||| ((posLexem DOT +.+ parseFieldName +.+ parseExpr')                                                   -- special case: chain .a.b.c... | .a + b
                     <<< \(dot, ((fldName, pos), texpr)) -> Chain (RSfaExpr (spanPos (position dot) pos) fldName) texpr)
-
+{- This = 'this' -}
 parseThis :: Parser PositionedToken Expr
 parseThis = posLexem THIS <<< \tkn ->  This (position tkn)
 
+{- Super = 'super' -}
 parseSuper :: Parser PositionedToken Expr
 parseSuper = posLexem SUPER <<< \tkn -> Super (position tkn)
 
+{- Name = LocalOrFieldOrClassName -}
 parseName :: Parser PositionedToken Expr
 parseName =  parseLocalOrFieldOrClassName <<< \(name, pos) -> Name pos name
 
+{- Unary = UnOp : Expr -}
 parseUnary :: Parser PositionedToken Expr
 parseUnary = (parseUnOp +.+ parseExpr) <<< \(op, expr) -> Unary (getPosFromExpr expr) op expr
 
+{- LiteralExpr = Literal -}
 parseLiteralExpr :: Parser PositionedToken Expr
 parseLiteralExpr = parseLiteral <<< \(lit, pos) -> Literal pos lit
 
+{- BraceExpr = '(' : Expr : ')' -}
 parseBraceExpr :: Parser PositionedToken Expr
 parseBraceExpr = (posLexem LBRACE +.+ parseExpr +.+ posLexem RBRACE) <<< \(_, (expr, _)) -> expr
 
 --parse stmt or expr without left recursion
-parseStmtOrExprEasy :: Parser PositionedToken Expr
-parseStmtOrExprEasy = ((parseMethodName +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) -- parse method call without expression
-                        <<< (\((mthName, pos1),(_, (callParams,rb)))
-                            -> StmtOrExprAsExpr (spanPos pos1 (position rb)) (MethodCall Nothing mthName callParams)))
+{-
+    StmtOrExprEasycase = MethodName : '(' : CallParams : ')'
+                       | New
+                       | LocalName : '=' : Expr
+-}
+parseStmtOrExprEasycase :: Parser PositionedToken Expr
+parseStmtOrExprEasycase =     ((parseMethodName +.+ posLexem LBRACE +.+ parseCallParams +.+ posLexem RBRACE) -- parse method call without expression
+                                <<< (\((mthName, pos1),(_, (callParams,rb)))
+                                    -> StmtOrExprAsExpr (spanPos pos1 (position rb)) (MethodCall Nothing mthName callParams)))
 
-                    ||| (parseNew <<< \(new, pos) -> StmtOrExprAsExpr pos new) -- parse 'new' expression
+                          ||| (parseNew 
+                                <<< \(new, pos) -> StmtOrExprAsExpr pos new) -- parse 'new' expression
 
-                    ||| ((parseLocalName +.+ posLexem ASSIGN +.+ parseExpr)
-                        <<< (\((varName, pos1), (_, expr))
-                            -> StmtOrExprAsExpr (spanPos pos1 (getPosFromExpr expr)) (Assign Nothing varName expr))) --parse simple assignment
-
-parseUnOp :: Parser PositionedToken UnOparator -- still typo
+                          ||| ((parseLocalName +.+ posLexem ASSIGN +.+ parseExpr)
+                                <<< (\((varName, pos1), (_, expr))
+                                    -> StmtOrExprAsExpr (spanPos pos1 (getPosFromExpr expr)) (Assign Nothing varName expr))) --parse simple assignment
+{- UnOp = '+' | '-' | '!' -}
+parseUnOp :: Parser PositionedToken UnOparator
 parseUnOp =     (posLexem PLUS          <<< const Plus)
             ||| (posLexem MINUS         <<< const Minus)
             ||| (posLexem EXCLMARK      <<< const LNot)
 
+{- BinOp = '+' | '-' | '*' | '/' | '%' | '&&' | '||' | '<' | '<=' | '>' | '>=' | '==' | '!=' -}
 parseBinOp :: Parser PositionedToken BinOperator
 parseBinOp =     (posLexem PLUS         <<< const Add)
              ||| (posLexem MINUS        <<< const Sub)
@@ -529,7 +552,10 @@ boolLit = True
 anyString :: String
 anyString = "anything"
 
--- all non exhaustive patterns are safe
+-- note: all non exhaustive patterns are safe
+{-
+    Literal = '_intliteral_' | '_charliteral_' | '_boolliteral_' | 'null'
+-}
 parseLiteral :: Parser PositionedToken (Literal, Position)
 parseLiteral =      (posLexem (INTLITERAL intLit)
                         <<< (\PositionedToken { token = (INTLITERAL x), position = pos} -> (IntLit x, pos)))
@@ -548,6 +574,9 @@ parseLiteral =      (posLexem (INTLITERAL intLit)
 {-----------------------------------------------------------------------------}
 
 -- parameter of type (IDENTIFIER __) are ignored
+{-
+    Type = 'char' | 'int' | 'boolean' | 'void' | '_classname_' | 'String[]'
+-}
 parseType :: Parser PositionedToken (Type, Position)
 parseType =     (posLexem CHAR <<< (\tkn -> (Char, position tkn)))
             ||| (posLexem INT <<< (\tkn -> (Int, position tkn)))
@@ -562,6 +591,9 @@ parseType =     (posLexem CHAR <<< (\tkn -> (Char, position tkn)))
 {-- # Visibilities -----------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
+{-
+    Visibility = 'public' | 'private' | 'protected' | e
+-}
 parseVisibility :: Parser PositionedToken AccessModifier
 parseVisibility =     (posLexem PUBLIC <<< const Public)
                   ||| (posLexem PRIVATE <<< const Private)
@@ -572,21 +604,29 @@ parseVisibility =     (posLexem PUBLIC <<< const Public)
 {-- # Identifier names -------------------------------------------------------}
 {-----------------------------------------------------------------------------}
 
+-- note: basically all following parsers are identical and will accept an (IDENTIFIER str) Token and are
+--       just named differently for better readability above
+
+{- Identifier = '_idliteral_' -}
 parseIdentifier :: Parser PositionedToken (Identifier, Position)
 parseIdentifier = posLexem (IDENTIFIER anyString)
                     <<< \PositionedToken {token = (IDENTIFIER name), position = pos} -> (name, pos) -- this pattern is safe
-
+{- ClassName = '_classname_' -}
 parseClassName :: Parser PositionedToken (ClassName, Position)
 parseClassName = parseIdentifier
 
+{- FieldName = '_fieldname_' -}
 parseFieldName :: Parser PositionedToken (FieldName, Position)
 parseFieldName = parseIdentifier
 
+{- MethodName = '_methodName_' -}
 parseMethodName :: Parser PositionedToken (MethodName, Position)
 parseMethodName = parseIdentifier
 
+{- LocalName = '_localName_' -}
 parseLocalName :: Parser PositionedToken (LocalName, Position)
 parseLocalName = parseIdentifier
 
+{- LocalOrFieldOrClassName = '_locOrFldOrClsName_' -}
 parseLocalOrFieldOrClassName :: Parser PositionedToken (LocalOrFieldOrClassName, Position)
 parseLocalOrFieldOrClassName = parseIdentifier
