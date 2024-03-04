@@ -19,7 +19,7 @@ lexer ('\'':ch: '\'':cs) = CHARLITERAL ch : lexer cs
 lexer ('\'':ch: cs) = WRONGTOKEN ("unclosed char: " ++ [ch]) 1 : lexer cs
 lexer ['\''] = [WRONGTOKEN "unclosed char" 0]
 lexer ('/' : '/' : xs) = lexInLineComment xs
-lexer ('/' : '*' : xs) = lexMulLineComment xs
+lexer ('/' : '*' : xs) = SPACE : SPACE : lexMulLineComment xs -- (spaces for positioning)
 lexer (c:cs)
       | c == '\n' = NEWLINE : lexer cs    -- to remember the line number
       | c == ' ' = SPACE : lexer cs
@@ -96,9 +96,9 @@ lexVar cs =
 
 -- comments -- 
 lexMulLineComment :: String -> [Token]
-lexMulLineComment ('*' : '/' : xs) = lexer xs
-lexMulLineComment ('\n' : xs) = NEWLINE : lexMulLineComment xs
-lexMulLineComment (_ : xs) = lexMulLineComment xs
+lexMulLineComment ('*' : '/' : xs) = SPACE : SPACE : lexer xs -- (space for positioning)
+lexMulLineComment ('\n' : xs) = NEWLINE : lexMulLineComment xs -- (newline for positioning)
+lexMulLineComment (_ : xs) = SPACE : lexMulLineComment xs -- (space for positioning)
 lexMulLineComment [] = error "unclosed multi line comment" -- scanner error when a comment is not closed
 
 lexInLineComment :: String -> [Token]
