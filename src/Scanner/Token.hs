@@ -43,7 +43,7 @@ data Token
      | VOID                     -- void
      | BOOLEAN                  -- boolean
      | INT                      -- int
-     | STRING                   -- String (leads to an error while scanning)
+     | STRING                   -- String (type)
 
      | IF                       -- if
      | WHILE                    -- while 
@@ -61,7 +61,7 @@ data Token
 
      | BOOLLITERAL Bool         -- true | false
      | CHARLITERAL Char         -- '..'
-     | STRINGLITERAL String     -- ".."
+     | STRINGLITERAL String     -- ".."  (leads to an error while scanning)
      | JNULL                    -- null
 
      | NEWLINE                  -- temporally holds information about positions
