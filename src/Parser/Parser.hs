@@ -1,5 +1,5 @@
 
-module Parser.IndexParser where
+module Parser.Parser where
 
 import Types.Core
     ( AccessModifier(Package, Public, Private),
