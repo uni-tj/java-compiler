@@ -160,7 +160,7 @@ indexTokens list = indexTokensRec 1 1 list where
 
 
 
--- final validation before carrying on with parsing
+-- validation of tokens before indexing
 isValidInt :: Integer -> Bool
 isValidInt num = (num <= 2147483647) && (num >= -2147483648)
 
