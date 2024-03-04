@@ -28,7 +28,6 @@ import Parser.Combinators
       (<<<),
       many,
       posLexem,
-      posLexemParam,
       succeed,
       (|||),
       Parser )
@@ -532,13 +531,13 @@ anyString = "anything"
 
 -- all non exhaustive patterns are safe
 parseLiteral :: Parser PositionedToken (Literal, Position)
-parseLiteral =      (posLexemParam (INTLITERAL intLit)
+parseLiteral =      (posLexem (INTLITERAL intLit)
                         <<< (\PositionedToken { token = (INTLITERAL x), position = pos} -> (IntLit x, pos)))
 
-                ||| (posLexemParam (CHARLITERAL charLit)
+                ||| (posLexem (CHARLITERAL charLit)
                         <<< (\PositionedToken { token = (CHARLITERAL chr), position = pos} -> (CharLit chr, pos)))
 
-                ||| (posLexemParam (BOOLLITERAL boolLit)
+                ||| (posLexem (BOOLLITERAL boolLit)
                         <<< (\PositionedToken {token = (BOOLLITERAL bol), position = pos} -> (BoolLit bol, pos)))
 
                 ||| (posLexem JNULL
@@ -554,7 +553,7 @@ parseType =     (posLexem CHAR <<< (\tkn -> (Char, position tkn)))
             ||| (posLexem INT <<< (\tkn -> (Int, position tkn)))
             ||| (posLexem BOOLEAN <<< (\tkn -> (Bool, position tkn)))
             ||| (posLexem VOID <<< (\tkn -> (Void, position tkn)))
-            ||| (posLexemParam (IDENTIFIER anyString)
+            ||| (posLexem (IDENTIFIER anyString)
                     <<< \PositionedToken { token = (IDENTIFIER name), position = pos} -> (Types.Core.Instance name, pos)) -- this pattern is safe
             ||| ((posLexem STRING +.+ posLexem LSQRBRACKET +.+ posLexem RSQRBRACKET)
                     <<< \(str, (_, rb)) -> (StringArr, makePos str rb))
@@ -574,7 +573,7 @@ parseVisibility =     (posLexem PUBLIC <<< const Public)
 {-----------------------------------------------------------------------------}
 
 parseIdentifier :: Parser PositionedToken (Identifier, Position)
-parseIdentifier = posLexemParam (IDENTIFIER anyString)
+parseIdentifier = posLexem (IDENTIFIER anyString)
                     <<< \PositionedToken {token = (IDENTIFIER name), position = pos} -> (name, pos) -- this pattern is safe
 
 parseClassName :: Parser PositionedToken (ClassName, Position)
