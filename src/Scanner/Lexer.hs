@@ -78,7 +78,7 @@ lexVar cs =
       ("this",rest)        -> THIS : lexer rest
       ("super", rest)      -> SUPER : lexer rest
       ("new",rest)         -> NEW : lexer rest
-      ("String",rest)      -> STRING : lexer rest
+      ("String", rest)     -> STRING : lexer rest
       ("char",rest)        -> CHAR : lexer rest
       ("void",rest)        -> VOID : lexer rest
       ("boolean",rest)     -> BOOLEAN : lexer rest
@@ -113,8 +113,9 @@ tokenLength (CHARLITERAL ch) | isSpace ch = 4 --in case of escape characters '\n
                              | otherwise = 3  --standard character
 tokenLength tkn = case tkn of
          (WRONGTOKEN _ len)   -> len
-         (IDENTIFIER str)     -> (length str) + 2
+         (IDENTIFIER str)     -> (length str)
          (INTLITERAL x)       -> (length (show x))
+         (STRINGLITERAL str)  -> (length str) + 2
          PUBLIC               -> 6
          PROTECTED            -> 9
          PRIVATE              -> 7
@@ -128,6 +129,7 @@ tokenLength tkn = case tkn of
          VOID                 -> 4
          BOOLEAN              -> 7
          INT                  -> 3
+         STRING               -> 6
          IF                   -> 2
          WHILE                -> 5
          ELSE                 -> 4
