@@ -21,7 +21,6 @@ data Class = Class
 
 data Field = Field
   { fposition :: Position
-  , foverride :: WithPosition Bool
   , faccess   :: WithPosition AccessModifier
   , fstatic   :: WithPosition Bool
   , ftype     :: WithPosition Type
