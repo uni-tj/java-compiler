@@ -201,7 +201,7 @@ parseConstructorDecl =    ((parseVisibility +.+ parseClassName +.+ posLexem LBRA
                                                             crname = WithPosition namePos name, 
                                                             crparams = params, 
                                                             crbody = Block (makePos lB rB) (thsSupCall ++ body)
-                                                            }))
+                                                        }))
 
                       ||| ((parseVisibility +.+ parseClassName +.+ posLexem LBRACE +.+ parseMethodParams +.+ posLexem RBRACE +.+ parseBlock)
                             <<< (\(WithPosition visPos vis, (WithPosition namePos name, (_, (params, (_, body)))))
@@ -303,7 +303,7 @@ parseFieldDecl =     ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseFi
                                         fstatic = WithPosition stcPos stcFlg, 
                                         fname = name, 
                                         finit = Just expr
-                                        }))
+                                    }))
 
                  ||| ((parseVisibility +.+ parseStatic +.+ parseType +.+ parseFieldName +.+ posLexem SEMICOLON)
                         <<< (\(WithPosition visPos vis, (WithPosition stcPos stcFlg, (WithPosition tpePos tpe, (name, PositionedToken {position = endPos }))))
