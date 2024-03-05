@@ -18,11 +18,8 @@ This is intentional to ensure its usability even if we decide to implement more 
 Todos:
 
 - check variable redeclarations (in nested blocks)
-- position errors
 - field override is subtype check
 - test acceess modifier checks on override
-- redo dead code checks to accomodate for if-else both returning
-- resolveSuper function
 
 Prechecked invariants that can later be relied on:
 
