@@ -17,7 +17,17 @@ data Type
   | Instance ClassName
   | Class ClassName
   | StringArr -- to support main method
-  deriving (Show, Eq, Ord)
+  deriving (Eq, Ord)
+instance Show Type where
+  show Int           = "int"
+  show Char          = "char"
+  show Bool          = "boolean"
+  show Void          = "void"
+  show NullType      = "null"
+  show (Instance cn) = cn
+  show (Class cn)    = cn ++ "[Class]"
+  show StringArr     = "String[]"
+
 
 data AccessModifier = Public | Package | Protected | Private
   deriving (Show, Eq, Ord)
