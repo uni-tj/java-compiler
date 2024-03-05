@@ -3,21 +3,19 @@ module Scanner.Lexer (scanner) where
 import Scanner.Token
 import Types.AST -- for Position type
 import Data.Char
+import Error.PrintError
 
 scanner :: String -> [PositionedToken]
-scanner = lexWithIndex
+scanner fl = lexWithIndex (lines fl) fl
 
-lexWithIndex :: String -> [PositionedToken]
-lexWithIndex =  indexTokens . validateTokens . lexer
-
-lexWithoutIndex :: String -> [Token]
-lexWithoutIndex = filterTokens . validateTokens . lexer
+lexWithIndex :: File -> String -> [PositionedToken]
+lexWithIndex fl =  validateTokens fl . indexTokens . lexer
 
 lexer :: String -> [Token]
 lexer [] = []
 lexer ('\'':ch: '\'':cs) = CHARLITERAL ch : lexer cs
-lexer ('\'':ch: cs) = WRONGTOKEN ("unclosed char: " ++ [ch]) 1 : lexer cs
-lexer ['\''] = [WRONGTOKEN "unclosed char" 0]
+lexer ('\'':ch: cs) = WRONGTOKEN ("unclosed character literal: " ++ [ch]) 1 : lexer cs
+lexer ['\''] = [WRONGTOKEN "unclosed character literal" 0]
 lexer ('/' : '/' : xs) = lexInLineComment xs
 lexer ('/' : '*' : xs) = SPACE : SPACE : lexMulLineComment xs -- (spaces for positioning)
 lexer (c:cs)
@@ -63,8 +61,8 @@ lexNum cs = INTLITERAL (read num) : lexer rest
 
 -- this will lead to an error later, while scanning
 lexStr :: String -> [Token]
-lexStr cs = STRINGLITERAL (read str) : lexer rest
-       where (str,rest) = span ('"' /=) cs
+lexStr cs = STRINGLITERAL str : lexer rest
+       where (str,rest) = span (/= '"') cs
 
 
 lexVar :: String -> [Token]
@@ -107,18 +105,15 @@ lexInLineComment ('\n' : xs) = NEWLINE : lexer xs
 lexInLineComment (_ : xs) = lexInLineComment xs
 
 
--- # adding line information to tokens # --
+-- # adding position information to tokens # --
 
--- filtering a Token list to not contain NEWLINE's anymore
-filterTokens :: [Token] -> [Token]
-filterTokens = filter (/= NEWLINE)
 
 tokenLength :: Token -> Int
-tokenLength (CHARLITERAL ch) | isSpace ch = 2 --in case of escape characters '\n', '\t', ...
-                             | otherwise = 1  --standard character
+tokenLength (CHARLITERAL ch) | isSpace ch = 4 --in case of escape characters '\n', '\t', ...
+                             | otherwise = 3  --standard character
 tokenLength tkn = case tkn of
          (WRONGTOKEN _ len)   -> len
-         (IDENTIFIER str)     -> (length str)
+         (IDENTIFIER str)     -> (length str) + 2
          (INTLITERAL x)       -> (length (show x))
          PUBLIC               -> 6
          PROTECTED            -> 9
@@ -155,20 +150,31 @@ indexTokens list = indexTokensRec 1 1 list where
     indexTokensRec _ vpos (NEWLINE : tkns) = indexTokensRec 1 (vpos + 1) tkns
     indexTokensRec hpos vpos (SPACE : tkns) = indexTokensRec (hpos + 1) vpos tkns
     indexTokensRec hpos vpos (tkn : tkns) =
-      PositionedToken { position = Position {start = (vpos, hpos), end = (vpos, hpos + tokenLength tkn)},
-         token = tkn } : indexTokensRec (hpos + tokenLength tkn) vpos tkns
+      PositionedToken { 
+                        position = Position {
+                                       start = (vpos, hpos), 
+                                       end = (vpos, hpos + tokenLength tkn)
+                                    },
+                        token = tkn 
+                     } : indexTokensRec (hpos + tokenLength tkn) vpos tkns
 
 
 
--- validation of tokens before indexing
+-- validation of tokens after indexing
 isValidInt :: Integer -> Bool
 isValidInt num = (num <= 2147483647) && (num >= -2147483648)
 
-validateTokens :: [Token] -> [Token]
-validateTokens [] = []
-validateTokens ((INTLITERAL x) : tkns) = if isValidInt x then INTLITERAL x : validateTokens tkns else
-   error (show x ++ " is out of range for int") -- throw an error for too |large| int-literals
-validateTokens ((STRINGLITERAL str) : _) =
-   error ("strings not supported yet :" ++ str) -- throw an error, when strings occur
-validateTokens ((WRONGTOKEN msg _) : _) = error msg
-validateTokens (tkn : tkns) = tkn : validateTokens tkns
+validateTokens :: File -> [PositionedToken] -> [PositionedToken]
+validateTokens _  []  = []
+validateTokens fl ((PositionedToken { position = pos, token = (INTLITERAL x)}) : tkns) = 
+   if isValidInt x then (PositionedToken { position = pos, token = INTLITERAL x}) : validateTokens fl tkns 
+      else error (printError fl (show x ++ " is too large for an integer literal") pos) -- throw an error for too |large| int-literals
+validateTokens fl ((PositionedToken { position = pos, token = (STRINGLITERAL str)}) : _) =
+   error (printError fl ("strings not supported yet :" ++ str) pos) -- throw an error, when strings occur
+validateTokens fl (PositionedToken { position = pos, token = (WRONGTOKEN msg _) } : _) = 
+   error (printError fl msg pos)
+validateTokens _ (PositionedToken { token = NEWLINE} : _) = 
+   error "internal error: newline-token was not removed"
+validateTokens _ (PositionedToken { token = SPACE} : _) = 
+   error "internal error: space-token was not removed"
+validateTokens fl (tkn : tkns) = tkn : validateTokens fl tkns
