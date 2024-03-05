@@ -314,7 +314,9 @@ checkConstructor cIass cr@AST.Constructor{ AST.crbody } = do
 checkStmt :: ExprCtx -> {-target::-}Type -> AST.Stmt -> ExceptState (TAST.Stmt, {-definiteReturn::-}Bool)
 checkStmt _   _      (AST.Block _ []) =
   return (TAST.Block [], False)
-checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl _ ltype lname minit:stmts)) = do
+checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl pos ltype lname minit:stmts)) = do
+  when (lname `Map.member` locals ctx)
+    $ throwPretty "Duplicate local variable name" pos
   minit' <- forM minit $ \init -> do
     init' <- checkExpr ctx init
     unlessM (typee' init' <: ltype)
