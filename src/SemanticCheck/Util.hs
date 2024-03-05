@@ -1,10 +1,13 @@
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverlappingInstances  #-}
-{-# LANGUAGE UndecidableInstances  #-}
-module SemanticCheck.Util (typee', TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), ExtendsTag(..), TypePositionTag(..), AccessPositionTag(..), StaticPositionTag(..), NamePositionTag(..), ParamsPositionTag(..), ExtendsPositionTag(..), PositionTag(..), Tag(..), From(..), FromPartial(..), simpleName) where
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE IncoherentInstances    #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverlappingInstances   #-}
+{-# LANGUAGE UndecidableInstances   #-}
+module SemanticCheck.Util (typee', TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), ExtendsTag(..), BodyTag(..), TypePositionTag(..), AccessPositionTag(..), StaticPositionTag(..), NamePositionTag(..), ParamsPositionTag(..), ExtendsPositionTag(..), PositionTag(..), Tag(..), From(..), FromPartial(..), simpleName, Signature, signatur, traverseStmtM) where
 
-import           Control.Monad.Except (MonadError)
+import           Control.Monad.Except (MonadError, forM_)
+import           Control.Monad.Extra  (whenJust)
 import           Data.Bifunctor       (bimap)
 import           Data.Functor.Syntax  ((<$$>))
 import           Data.List.Extra      (splitOn)
@@ -91,6 +94,10 @@ instance ParamsTag TAST.Method      where params = TAST.mparams
 instance ParamsTag TAST.Constructor where params = TAST.crparams
 class ParamsPositionTag a where
   tparams :: a -> [(AST.WithPosition Type, AST.WithPosition Identifier)]
+  tptypes :: a -> [AST.WithPosition Type]
+  tptypes = fmap fst . tparams
+  tpnames :: a -> [AST.WithPosition Identifier]
+  tpnames = fmap snd . tparams
 instance ParamsPositionTag AST.Method      where tparams = AST.mparams
 instance ParamsPositionTag AST.Constructor where tparams = AST.crparams
 
@@ -101,6 +108,13 @@ instance ExtendsPositionTag a => ExtendsTag a where
 class ExtendsPositionTag a where
   textends :: a -> Maybe (AST.WithPosition Identifier)
 instance ExtendsPositionTag AST.Class where textends = AST.cextends
+
+class BodyTag a b where
+  body :: a -> b
+instance BodyTag AST.Method      AST.Stmt where body = AST.mbody
+instance BodyTag AST.Constructor AST.Stmt where body = AST.crbody
+instance BodyTag TAST.Method      TAST.Stmt where body = TAST.mbody
+instance BodyTag TAST.Constructor TAST.Stmt where body = TAST.crbody
 
 class PositionTag a where
   position :: a -> AST.Position
@@ -129,19 +143,10 @@ instance PositionTag AST.Stmt where
   position (AST.SuperCall pos _)        = pos
   position (AST.StmtOrExprAsStmt pos _) = pos
 
-class Tag t a where
+class Tag t a | t -> a where
   untag :: t -> a
 instance Tag (AST.WithPosition a) a where
   untag (AST.WithPosition _ v) = v
-
--- class BodyTag a b where
---   bodyL :: Lens' a b
---   body :: a -> b
---   body = view bodyL
--- instance BodyTag TAST.Method      TAST.Stmt where
---   bodyL fn (TAST.Method a b c d e f) = fn f <&> TAST.Method a b c d e
--- instance BodyTag TAST.Constructor TAST.Stmt where
---   bodyL fn (TAST.Constructor a b c) = fn c <&> TAST.Method a b
 
 class From b a where from :: a -> b
 
@@ -149,3 +154,16 @@ class FromPartial b a e where fromM :: MonadError e m => a -> m b
 
 simpleName :: AST.Class -> Identifier
 simpleName = last . splitOn "/" . name
+
+{- The signature of a method -}
+type Signature = (Identifier, [Type])
+signatur :: (NameTag np, ParamsTag np) => np -> Signature
+signatur np = (name np, ptypes np)
+
+{- traverse a stmt recursively -}
+traverseStmtM :: Monad m => (AST.Stmt -> m ()) -> AST.Stmt -> m ()
+traverseStmtM f stmt = f stmt >> case stmt of
+  (AST.Block _ substmts)          -> forM_ substmts (traverseStmtM f)
+  (AST.While _ _ substmt)         -> traverseStmtM f substmt
+  (AST.If _ _ substmt1 msubstmt2) -> traverseStmtM f substmt1 >> whenJust msubstmt2 (traverseStmtM f)
+  _                               -> return ()
