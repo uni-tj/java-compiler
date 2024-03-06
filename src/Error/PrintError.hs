@@ -51,7 +51,7 @@ red :: String -> String
 red str = setSGRCode [SetColor Foreground Vivid Red] ++ str ++ setSGRCode [Reset]
 
 printError :: File -> String -> Position -> String
-printError fl msg pos = red ("Error: " ++ msg ++ "\n\n") ++ code ++ "\n"
+printError fl msg pos = red ("\nError: " ++ msg ++ "\n\n") ++ code ++ "\n"
   where
     startLn = max 1 $ subtract 3 $ line (start pos)
     endLn   = min (length fl) $ (+3) $ line (end pos)

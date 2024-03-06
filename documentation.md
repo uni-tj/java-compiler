@@ -29,6 +29,7 @@ Prechecked invariants that can later be relied on:
 - valid types
   - every user-written type is valid. If it refers to a class, the class exists.
   - Since all generated types are assumed to be correct, the type-related functions need not worry about class resolution failing and carrying positions around.
+- field initializers are copied to all constructors that do not call another constructor of the same class
 
 Features:
 
