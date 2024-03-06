@@ -2,18 +2,12 @@ module Compiler (compile, DebugMode(..)) where
 import           ByteCodeGen.ByteCodeGen   (codeGen)
 import           ConstantPool.ConstantPool (wrapConstantPool)
 import           Control.Monad.Extra       (when, zipWithM_)
-import           Data.List.Extra           (dropSuffix, dropWhileEnd)
+import           Data.List.Extra           (dropWhileEnd)
 import           Jvm.BinaryClass           (encodeClassFile)
 import           Parser.Parser             (parser)
 import           Scanner.Lexer             (scanner)
 import           SemanticCheck.Typecheck   (typecheck)
 import           Types.TAST                (Class (cname))
-
-extension :: String -> String
-extension = dropWhileEnd (/= '.')
-
-name :: String -> String
-name path = (dropSuffix $ '.' : extension path) path
 
 directory :: FilePath -> FilePath
 directory = dropWhileEnd (/= '/')
