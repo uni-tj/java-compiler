@@ -1,24 +1,7 @@
 class Main {
   public static void main(String[] args) {
-    Super sup = new Super();
-    System.out.println(sup.x);
     new InitializeOnlyOnce(0);
   }
-}
-
-class Super {
-  B x = new B();
-}
-
-class Sub extends Super {
-  A x = new A();
-}
-
-class A {
-}
-
-class B extends A {
-
 }
 
 class InitializeOnlyOnce {

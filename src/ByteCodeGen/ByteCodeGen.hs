@@ -245,10 +245,10 @@ codeGenStmtOrExpr (a@(FieldAssign varType tagetExpr className static fieldName v
     then (tagetExprCode ++ valueExprCode ++ [179] ++ fieldref, varType)
     else (tagetExprCode ++ valueExprCode ++ [181] ++ fieldref, varType)
 codeGenStmtOrExpr (New newType className exprs, localVarArr, sf) = do
-  let newCode = [187] ++ (splitLenInTwoBytes ((findClass sf) className)) ++ [89 {-Dup-}] ++ [183] ++ (splitLenInTwoBytes $ (findConstructor sf) className $ map fst exprs) -- -> Call constructor
   let paraCode = concatMap (fst . (\(typ, exprPara) -> codeGenExpr (exprPara, localVarArr, sf))) exprs
+  let newCode = [187] ++ (splitLenInTwoBytes ((findClass sf) className)) ++ [89 {-Dup-}] ++ paraCode ++ [183] ++ (splitLenInTwoBytes $ (findConstructor sf) className $ map fst exprs) -- -> Call constructor
 
-  (paraCode ++ newCode, newType)
+  (newCode, newType)
 codeGenStmtOrExpr (m@(MethodCall methodType expr className static methodName paras), localVarArr, sf) = do
   let (codeExpr, t) = codeGenExpr (expr, localVarArr, sf)
 
@@ -325,27 +325,27 @@ calcLenStack opcode
   | opcode == 154 = -1 -- ifne
   | opcode == 54 = -1 -- istore
   | opcode == 58 = -1 -- astore
-  | opcode == 42 = 1 -- aload_0 
-  | opcode == 21 = 1 -- iload 
+  | opcode == 42 = 1 -- aload_0
+  | opcode == 21 = 1 -- iload
   | opcode == 25 = 1 -- aload
   | opcode == 178 = 1 -- getstatic
   | opcode == 180 = 1 -- getfield
   | opcode == 19 = 1 -- ldc_w
   | opcode == 179 = -1 -- putstatic
   | opcode == 181 = -1 -- putfield
-  | opcode == 187 = 1 -- new 
-  | opcode == 89 = 1 -- dup 
-  | opcode == 96 = -1 -- iadd 
-  | opcode == 100 = -1 -- isub 
-  | opcode == 104 = -1 -- imul 
-  | opcode == 108 = -1 -- idiv 
-  | opcode == 112 = -1 -- irem 
-  | opcode == 126 = -1 -- iand 
-  | opcode == 128 = -1 -- ior 
-  | opcode == 130 = -1 -- ixor 
-  | opcode == 161 = -2 -- if_icmplt 
-  | opcode == 163 = -2 -- if_icmpgt 
-  | opcode == 3 = 1 -- iconst_0 
+  | opcode == 187 = 1 -- new
+  | opcode == 89 = 1 -- dup
+  | opcode == 96 = -1 -- iadd
+  | opcode == 100 = -1 -- isub
+  | opcode == 104 = -1 -- imul
+  | opcode == 108 = -1 -- idiv
+  | opcode == 112 = -1 -- irem
+  | opcode == 126 = -1 -- iand
+  | opcode == 128 = -1 -- ior
+  | opcode == 130 = -1 -- ixor
+  | opcode == 161 = -2 -- if_icmplt
+  | opcode == 163 = -2 -- if_icmpgt
+  | opcode == 3 = 1 -- iconst_0
   | opcode == 4 = 1 -- iconst_1
   | otherwise = 0
 
