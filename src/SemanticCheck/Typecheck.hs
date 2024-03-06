@@ -320,7 +320,7 @@ checkStmt ctx target (AST.Block blockPos (AST.LocalVarDecl pos ltype lname minit
   minit' <- forM minit $ \init -> do
     init' <- checkExpr ctx init
     unlessM (typee' init' <: ltype)
-      $ throwPretty ("Type of the initalizer " ++ show (typee' init') ++ " is not a subtype of the declared type.") $ position (fromJust minit)
+      $ throwPretty ("Expected right hand side to be a subtype of " ++ show ltype ++ ", but has type " ++ show (typee' init') ++ ".") $ position init
     return init'
   (block', defReturns) <- checkStmt (ctx & localsL %~ Map.insert lname ltype) target $ AST.Block blockPos stmts
   --  This is safe, as AST.Block is used as input
@@ -465,7 +465,7 @@ checkExpr ctx@Ctx{locals} (AST.StmtOrExprAsExpr pos (AST.Assign mleft uname righ
   where
     checkAssignable target right' = do
       unlessM (typee' right' <: target)
-        $ throwPretty ("Expected right hand side to be a subtype of " ++ show target ++ ", but has type " ++ show (typee' right') ++ ".") pos
+        $ throwPretty ("Expected right hand side to be a subtype of " ++ show target ++ ", but has type " ++ show (typee' right') ++ ".") $ position right
     asExpr left = do
       left' <- checkExpr ctx left
       right' <- checkExpr ctx right
