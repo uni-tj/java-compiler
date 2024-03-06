@@ -58,3 +58,11 @@ class B extends A {
   }
 
 }
+
+class Super {
+  A x;
+}
+
+class Sub extends Super {
+  B x;
+}
