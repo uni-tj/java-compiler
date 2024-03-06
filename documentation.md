@@ -17,10 +17,6 @@ This is intentional to ensure its usability even if we decide to implement more 
 
 Todos:
 
-- check variable redeclarations (in nested blocks)
-- field override is subtype check
-- test acceess modifier checks on override
-
 Prechecked invariants that can later be relied on:
 
 - valid inheritance graph
