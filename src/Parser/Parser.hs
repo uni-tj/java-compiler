@@ -89,22 +89,16 @@ completeParser = parser . scanner
 parser :: [PositionedToken] -> Either String Program
 parser = tokenParser
 
--- parser
--- if there were correct solutions it will show these,
--- otherwise the remaining tokens are displayed
+-- parser returns Either (Left error) or (Right AST) if
+-- a correct solution was found
 tokenParser :: [PositionedToken] -> Either String Program
 tokenParser input =
     let parsed = parseProgram input
     in
         let correctSolutions =  correctSols parsed
         in 
-            if null correctSolutions then Left (remaining parsed)
+            if null correctSolutions then Left "parse Error on input"
             else Right (fst (head (correctSols (parseProgram input))))
-
--- shows the remaining tokens (used if there were no correct solutions)
-remaining :: Show b => [(a, [b])] -> String 
-remaining ((_, [b]) : xs) = "error on tokens: " ++ show b
-remaining _ = " "
 
 -- filters the parser ouptut to only solutions without remaining tokens
 correctSols :: [(t, [a])] -> [(t, [a])]
@@ -151,7 +145,8 @@ parseClass =    ((parseVisibility +.+ posLexem CLASS +.+ parseClassName +.+ posL
                                         cextends = Nothing, --nothing indicating: extends Object
                                         cfields = getFields cblock, 
                                         cmethods = getMethods cblock, 
-                                        cconstructors = getConstructors  cblock name}))
+                                        cconstructors = getConstructors  cblock name
+                                        }))
 
 --temporary data type for class entries
 data ClassEntry = ClassConstructor Constructor
