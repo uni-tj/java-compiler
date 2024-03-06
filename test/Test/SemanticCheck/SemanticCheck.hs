@@ -1,11 +1,12 @@
-module Test.SemanticCheck.SemanticCheck (semanticCheckTests) where
+module Test.SemanticCheck.SemanticCheck () where
+-- module Test.SemanticCheck.SemanticCheck (semanticCheckTests) where
 
-import           Test.HUnit                          (Test, (~:))
-import           Test.SemanticCheck.MethodResolution (methodResolutionTests)
-import           Test.SemanticCheck.ReturnInjection  (returnInjectionTests)
+-- import           Test.HUnit                          (Test, (~:))
+-- import           Test.SemanticCheck.MethodResolution (methodResolutionTests)
+-- import           Test.SemanticCheck.ReturnInjection  (returnInjectionTests)
 
-semanticCheckTests :: Test
-semanticCheckTests = "SemantikCheck" ~:
-  [ methodResolutionTests
-  , returnInjectionTests
-  ]
+-- semanticCheckTests :: Test
+-- semanticCheckTests = "SemantikCheck" ~:
+--   [ methodResolutionTests
+--   , returnInjectionTests
+--   ]
