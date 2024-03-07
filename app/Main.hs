@@ -5,6 +5,7 @@ import           System.Environment (getArgs)
 
 debug :: DebugMode
 debug = Debug
+-- debug = NoDebug
 
 main :: IO ()
 main = do
