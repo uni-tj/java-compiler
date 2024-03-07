@@ -80,6 +80,7 @@ createMethodObject (cName, m@(Method methodAccess mtype methodStatic mName metho
         ]
     }
 
+-- Special function for constructor methods, as they differ from normal methods
 createConstructorObject :: (String, Constructor, CP.SearchFunctions) -> Method_Info
 createConstructorObject (cName, Constructor crAccess crParams crBody, sf) = do
   let accessFlags = getAccessFlags (crAccess, False)
@@ -184,7 +185,7 @@ codeGenStmt (StmtOrExprAsStmt stmtOrExpr, localVarArr, sf) = do
   codeStmtOrExpr
 
 codeGenExpr :: (Expr, LocalVarArrType, CP.SearchFunctions) -> ([Int], Type)
-codeGenExpr (This thisType, localVarArr, sf) = ([42], thisType) -- Aload_0 -> This is always at position 0
+codeGenExpr (This thisType, localVarArr, sf) = ([42], thisType) -- Aload_0 -> "This" is always at position 0
 codeGenExpr (Super superName, localVarArr, sf) = ([], NullType)
 codeGenExpr (LocalVar localVarType localVarName, localVarArr, sf) = do
   let i = findIndex ((== localVarName) . fst) localVarArr
