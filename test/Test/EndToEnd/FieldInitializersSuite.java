@@ -1,3 +1,5 @@
+// package test.Test.EndToEnd;
+
 class FieldInitializersSuite {
   public static void main(String[] args) {
     new InitializeOnlyOnceTest(0);

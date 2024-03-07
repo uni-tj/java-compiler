@@ -204,6 +204,9 @@ precheckClass cIass = do
   whenM (any ((name cIass ==) . simpleName) <$> gets stdLib)
     $ throwPretty (name cIass ++ " redefines a standard library class.") $ position (tname cIass)
   precheckExtends cIass
+  forM_ (AST.cfields cIass) $ \field ->
+    when (static field && isJust (AST.finit field))
+      $ throwPretty "Static fields with initializer are not supported." $ position field
   cIass & cconstructorsL %~ applyWhen' null (defConstructor cIass:)
         & cextendsL %~ applyWhen' isNothing (const $ Just $ StdLib.withAuthGen "java/lang/Object")
         & cconstructorsL . traverse %%~ precheckConstructor
