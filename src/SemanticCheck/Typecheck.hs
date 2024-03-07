@@ -705,6 +705,7 @@ method `isApplicableTo` targs = matchingLength &&^ matchingTypes
 
 {- Is left a subtype of right? -}
 (<:) :: Type -> Type -> ExceptState Bool
+NullType     <: Instance _   = return True
 Instance cn1 <: Instance cn2 = do
   cIass1 <- flip whenNothingM (throwInternal "Found invalid type. This should be prechecked.")
             $ lookupClass cn1
