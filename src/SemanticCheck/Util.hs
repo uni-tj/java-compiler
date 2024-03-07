@@ -1,16 +1,17 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE IncoherentInstances    #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE MonoLocalBinds         #-}
 {-# LANGUAGE OverlappingInstances   #-}
 {-# LANGUAGE UndecidableInstances   #-}
-module SemanticCheck.Util (typee', TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), ExtendsTag(..), BodyTag(..), TypePositionTag(..), AccessPositionTag(..), StaticPositionTag(..), NamePositionTag(..), ParamsPositionTag(..), ExtendsPositionTag(..), PositionTag(..), Tag(..), From(..), FromPartial(..), simpleName, Signature, signatur, traverseStmtM) where
+module SemanticCheck.Util (typee', TypeTag(..), AccessTag(..), StaticTag(..), NameTag(..), ParamsTag(..), ExtendsTag(..), BodyTag(..), TypePositionTag(..), AccessPositionTag(..), StaticPositionTag(..), NamePositionTag(..), ParamsPositionTag(..), ExtendsPositionTag(..), PositionTag(..), Tag(..), From(..), FromPartial(..), simpleName, Signature, signatur, showSignature, showList, isBlock, traverseStmtM) where
 
 import           Control.Monad.Except (MonadError, forM_)
 import           Control.Monad.Extra  (whenJust)
 import           Data.Bifunctor       (bimap)
 import           Data.Functor.Syntax  ((<$$>))
-import           Data.List.Extra      (splitOn)
+import           Data.List.Extra      (intercalate, splitOn)
+import           Prelude              hiding (showList)
 import qualified Types.AST            as AST
 import           Types.Core           (AccessModifier (..), Identifier,
                                        Type (..))
@@ -159,6 +160,18 @@ simpleName = last . splitOn "/" . name
 type Signature = (Identifier, [Type])
 signatur :: (NameTag np, ParamsTag np) => np -> Signature
 signatur np = (name np, ptypes np)
+
+{- Prettyprint method signature -}
+showSignature :: Identifier -> [Type] -> String
+showSignature fname partypes = fname ++ "(" ++ intercalate ", " (show <$> partypes) ++ ")"
+
+{- Print comma-separated list -}
+showList :: Show a => [a] -> String
+showList = intercalate ", " . map show
+
+isBlock :: AST.Stmt -> Bool
+isBlock AST.Block{} = True
+isBlock _           = False
 
 {- traverse a stmt recursively -}
 traverseStmtM :: Monad m => (AST.Stmt -> m ()) -> AST.Stmt -> m ()

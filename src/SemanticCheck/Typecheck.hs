@@ -25,11 +25,11 @@ import           Data.Function        ((&))
 import           Data.Function.Syntax ((*.))
 import           Data.Functor         ((<&>))
 import           Data.Functor.Syntax  ((<$$>))
-import           Data.List            (find, groupBy, intercalate)
+import           Data.List            (find, groupBy)
 import           Data.List.NonEmpty   (unzip)
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
-import           Data.Maybe           (fromJust, fromMaybe, isJust, isNothing,
+import           Data.Maybe           (fromMaybe, isJust, isNothing,
                                        listToMaybe, mapMaybe)
 import           Data.Tuple.Extra     (swap)
 import           Debug.Trace          (traceShow)
@@ -43,7 +43,9 @@ import           Types.Core           (AccessModifier (..), BinOperator (..),
                                        Identifier, Type (..), UnOparator (..))
 import qualified Types.TAST           as TAST
 
-{- General helper functions -}
+{--- General helper functions ---}
+
+{- Find duplicates using a function -}
 duplicatesWith :: Eq b => (a -> b) -> [a] -> [[a]]
 duplicatesWith f = filter ((2 <=) . length) . groupBy (\x y -> f x == f y)
 
@@ -53,14 +55,17 @@ m1 <<>^ m2 = do
   may1 <- m1
   if isJust may1 then return may1 else m2
 
+{- Or operation on predicates -}
 infixr 2 |||
 (|||) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
 (|||) f1 f2 x = f1 x || f2 x
 
+{- Lisp-style monadic conditional -}
 condM :: Monad m => [(m Bool, m a)] -> m a
 condM []          = error "Non-exhaustive patterns in condM"
 condM ((p,v):pvs) = ifM p v (condM pvs)
 
+{- otherwise lifted to Monad -}
 otherwiseM :: Monad m => m Bool
 otherwiseM = return otherwise
 
@@ -71,11 +76,14 @@ whenNothingM m alt = m >>= \case
   (Just x) -> return x
   Nothing  -> alt
 
+{- Applies a funciton if the condition matches -}
 applyWhen :: Bool -> (a -> a) -> a -> a
 applyWhen = flip (bool id)
+{- Applies a function if the predicate matches -}
 applyWhen' :: (a -> Bool) -> (a -> a) -> a -> a
 applyWhen' cond f x = if cond x then f x else x
 
+{- Like traceShowId, but prints the result of a function -}
 traceShowWith :: Show a => (b -> a) -> b -> b
 traceShowWith f v = traceShow (f v) v
 
@@ -83,37 +91,52 @@ traceShowWith f v = traceShow (f v) v
 afterHead :: [a] -> [a] -> [a]
 afterHead new (x:xs) = x : new ++ xs
 afterHead new []     = new
-{- General helper functions end -}
 
-{- Lens helpers -}
--- byName :: NameTag a => Identifier -> Lens' [AST.Class] AST.Class
--- byName n f cs = applyWhen ((n ==) . name) f <$> cs
+{- Throw internal error -}
+throwInternal :: (MonadError String m) => String -> m a
+throwInternal = throwError . ("Internal Error: " ++)
 
+{--- Lens helpers ---}
+
+{- Lens on the classes of the GlobalCtx -}
 cIassesL :: Lens' GlobalCtx [AST.Class]
 cIassesL f (GlobalCtx a b c) = f a <&> \a' -> GlobalCtx a' b c
 
+{- Lens on the cextends field of a class -}
 cextendsL :: Lens' AST.Class (Maybe (AST.WithPosition Identifier))
 cextendsL fn (AST.Class a b c d e f g) = fn d <&> \d' -> AST.Class a b c d' e f g
+
+{- Lens on the constructors of a class -}
 cconstructorsL :: Lens' AST.Class [AST.Constructor]
 cconstructorsL fn (AST.Class a b c d e f g) = fn g <&> AST.Class a b c d e f
 
+{- Lens on the body a constructor -}
 crbodyL :: Lens' AST.Constructor AST.Stmt
 crbodyL f (AST.Constructor a b c d e) = f e <&> AST.Constructor a b c d
 
+{- Lens on the locals of an ExprCtx -}
 localsL :: Lens' ExprCtx (Map Identifier Type)
 localsL f (Ctx a b c) = f a <&> \a' -> Ctx a' b c
 
--- Partial lens on the statements of a block
+{- Partial lens on the statements of a block -}
 stmtsL :: Lens' AST.Stmt [AST.Stmt]
 stmtsL fn (AST.Block a b) = fn b <&> AST.Block a
 stmtsTL :: Lens' TAST.Stmt [TAST.Stmt]
 stmtsTL fn (TAST.Block a) = fn a <&> TAST.Block
-{- Lens helpers end -}
 
+{--- Contexts ---}
+
+{- Global state
+
+  Contains the user program (cIasses), standard library (stdLib) and original source file (gFile).
+-}
 data GlobalCtx = GlobalCtx { cIasses :: [AST.Class], stdLib :: [AST.Class], gfile :: File }
 instance FileContainer GlobalCtx where file = gfile
-type ExceptState = ExceptT String (State GlobalCtx)
 
+{- Context of a method/field access.
+
+  E.g. {astatic=True,aname="A"} in A.foo()
+-}
 data AccessCtx = AccessCtx { astatic :: Bool, aname :: Identifier }
   deriving (Show)
 instance StaticTag   AccessCtx where static = astatic
@@ -131,18 +154,11 @@ accessCtx = from
 accessCtxM :: FromPartial AccessCtx a String => a -> ExceptState AccessCtx
 accessCtxM = fromM
 
-showSignature :: Identifier -> [Type] -> String
-showSignature fname partypes = fname ++ "(" ++ intercalate ", " (show <$> partypes) ++ ")"
+{- Context an expression is evaluated in -}
+data ExprCtx = Ctx { locals :: Map Identifier Type, cIass :: AST.Class, staticCtx :: Bool}
+instance StaticTag ExprCtx where static = staticCtx
 
-showList :: Show a => [a] -> String
-showList = intercalate ", " . map show
-
-throwInternal :: (MonadError String m) => String -> m a
-throwInternal = throwError . ("Internal Error: " ++)
-
-isBlock :: AST.Stmt -> Bool
-isBlock AST.Block{} = True
-isBlock _           = False
+{--- Position helpers ---}
 
 {- Tag a value with a position -}
 infixl 9 @
@@ -162,15 +178,7 @@ ta ?@@ tb = case position ta of
   AST.AutoGenerated -> untag ta @@ tb
   _                 -> ta
 
-data ExprCtx = Ctx { locals :: Map Identifier Type, cIass :: AST.Class, staticCtx :: Bool}
-instance StaticTag ExprCtx where static = staticCtx
-
-defSuperCall :: AST.Stmt
-defSuperCall = AST.SuperCall AST.AutoGenerated []
-defConstructor :: AST.Class -> AST.Constructor
-defConstructor cIass
-  = AST.Constructor AST.AutoGenerated (StdLib.withAuthGen $ access cIass) (StdLib.withAuthGen $ name cIass) []
-  $ AST.Block AST.AutoGenerated [defSuperCall]
+{--- Entry point ---}
 
 typecheck :: File -> AST.Program -> TAST.Program
 typecheck _file prg = case flip evalState globalCtx $ runExceptT $ typecheckM prg of
@@ -178,19 +186,19 @@ typecheck _file prg = case flip evalState globalCtx $ runExceptT $ typecheckM pr
   Right prg' -> prg'
   where globalCtx = GlobalCtx { cIasses = prg, stdLib = StdLib.stdLib, gfile = _file }
 
+type ExceptState = ExceptT String (State GlobalCtx)
 typecheckM :: AST.Program -> ExceptState TAST.Program
 typecheckM prg = do
   prechecked <- precheckProgram prg
   cIassesL .= prechecked
   checkProgram prechecked
 
-{- Prechecks
- - Check invariants that are later needed to not throw errors at the wrong positions
- - Expand AST by libararies and missing constructors that are later expected to exist
+{--- Precheck functions
 
- - Prechecks of classes are generally independent from each other,
- - while checks need information from other classes.
- -}
+  Check invariants that are later needed to not throw errors at the wrong positions.
+  Expand AST by libararies, missing constructors, etc. that are later expected to exist.
+---}
+
 precheckProgram :: AST.Program -> ExceptState AST.Program
 precheckProgram prg = do
   let duplicateNames = duplicatesWith (untag :: _ -> String) $ tname <$> prg
@@ -228,7 +236,11 @@ precheckConstructor cr = do
         isCrCall (AST.SuperCall{}) = True
         isCrCall _                 = False
 
-{- Ensure every user-writte type is valid -}
+{- Ensure every user-writte type is valid
+
+  Mainly checks referenced classes exist. This simplifies type-related functions as they
+  don't require positions.
+-}
 precheckTypes :: AST.Program -> ExceptState ()
 precheckTypes prg = do
   forM_ prg $ \cIass -> do
@@ -243,7 +255,17 @@ precheckTypes prg = do
   where
     precheckTypesStmt (AST.LocalVarDecl pos _type _ _) = checkTypeValid $ AST.WithPosition pos _type
     precheckTypesStmt _ = return ()
--- precheckTypes
+
+{- Default super call -}
+defSuperCall :: AST.Stmt
+defSuperCall = AST.SuperCall AST.AutoGenerated []
+{- Default constructor -}
+defConstructor :: AST.Class -> AST.Constructor
+defConstructor cIass
+  = AST.Constructor AST.AutoGenerated (StdLib.withAuthGen $ access cIass) (StdLib.withAuthGen $ name cIass) []
+  $ AST.Block AST.AutoGenerated [defSuperCall]
+
+{--- Check functions ---}
 
 checkProgram :: AST.Program -> ExceptState TAST.Program
 checkProgram prg = do
@@ -535,9 +557,8 @@ checkExpr ctx (AST.StmtOrExprAsExpr pos (AST.MethodCall mexpr mname args)) = do
     $ TAST.MethodCall (typee method) expr' methodCIass (static method) mname $ zip (ptypes method) args'
   where cIassName = name $ cIass ctx
 
-{- typecheck helper functions
--}
--- doesn't need monad, because all classes are public/package and therefore accessible
+{--- lookup/resolve functions ---}
+
 lookupClass :: Identifier -> ExceptState (Maybe AST.Class)
 lookupClass cname = asStdLib <<>^ asCIass
   where asStdLib = find (((cname ==) . simpleName) ||| (cname ==) . name) <$> gets stdLib
@@ -625,6 +646,11 @@ isAccessible Ctx{cIass=this} target a = case access a of
   where tthis   = Instance (name this)
         ttarget = Instance (name target)
 
+{--- Utility check functions
+
+  Check single properties of ast elements.
+---}
+
 checkStatic :: (StaticTag el, PositionTag el) => String -> AccessCtx -> el -> ExceptState ()
 checkStatic display ctx el = do
   when (static ctx && not (static el))
@@ -646,14 +672,16 @@ checkDuplicateSignature object xs = do
   whenJust (listToMaybe $ duplicatesWith signatur xs)
     $ throwPretty ("Duplicate " ++ object ++ ". There already exists a " ++ object ++ " with the same signature.") . position . last
 
-{- type related functions
--}
-{- Checks whether the class of an user-written type exists -}
+{--- type related functions ---}
 checkTypeValid :: (PositionTag t, Tag t Type) => t -> ExceptState ()
 checkTypeValid ttype = case untag ttype of
   (Instance cn) -> void $ resolveClass (cn @@ ttype)
   _             -> return ()
 
+{- Anchestors of a class
+
+  Throws if inheritance cycle is found.
+-}
 anchestors :: AST.Class -> ExceptState [Identifier]
 anchestors cIass = anchestors' (textends cIass) []
   where anchestors' :: Maybe (AST.WithPosition Identifier) -> [Identifier] -> ExceptState [Identifier]
@@ -664,15 +692,17 @@ anchestors cIass = anchestors' (textends cIass) []
           super <- resolveClass tsuperName
           anchestors' (textends super) (name super : found)
 
+{- Are args applicable to method/constructor? -}
 isApplicableTo :: (ParamsTag p) => p -> [Type] -> ExceptState Bool
 method `isApplicableTo` targs = matchingLength &&^ matchingTypes
   where matchingLength = return $ length (params method) == length targs
         matchingTypes  = and <$> zipWithM (<:) targs (ptypes method)
 
--- Return whether parameter types of one method are a specialization of another
+{- Are parameters of left function a specialisation of the right? -}
 (<~:) :: [Type] -> [Type] -> ExceptState Bool
 (<~:) tparams1 tparams2 = and <$> zipWithM (<:) tparams1 tparams2
 
+{- Is left a subtype of right? -}
 (<:) :: Type -> Type -> ExceptState Bool
 Instance cn1 <: Instance cn2 = do
   cIass1 <- flip whenNothingM (throwInternal "Found invalid type. This should be prechecked.")
