@@ -22,9 +22,6 @@ type MICP = (CF.Field_Infos, [(Int, CF.CP_Info)])
 type ConstantPoolState = State MICP
 
 strLen :: String -> Int
-typee :: TAST.Expr -> Core.Type
-typee _ = Core.Int
--- TODO Implementation from Utils Timon
 
 strLen str = BS.length $ TE.encodeUtf8 $ T.pack str
 
@@ -120,7 +117,6 @@ convertTypeToString (Core.Instance cname) = "L" ++ cname ++ ";"
 convertTypeToString (Core.Class cname) = "L" ++ cname ++ ";"
 convertTypeToString Core.StringArr = "[Ljava/lang/String;"
 
--- TODO Checking StringArray Issues andPrintln
 
 constructDescriptor :: Core.Type -> [Core.Type] -> String
 constructDescriptor rType argTypes =
@@ -196,7 +192,6 @@ insertField cIdx (TAST.Field facces fstatic ftype fname finit) = do
             , desc = ""
             }
 
---- !! WIP !!
 traverseStmt :: TAST.Stmt -> ConstantPoolState ()
 traverseStmt (TAST.Block stmts) = mapM_ traverseStmt stmts
 traverseStmt (TAST.Return maybeExpr) = maybe (return ()) traverseExpr maybeExpr
@@ -252,8 +247,8 @@ traverseStmt (TAST.SuperCall cname args) = do
 traverseStmt (TAST.StmtOrExprAsStmt stmtOrExpr) = trace "traverseStmtor Expr as stmt" $ traverseStmtOrExpr stmtOrExpr
 
 traverseExpr :: TAST.Expr -> ConstantPoolState ()
-traverseExpr (TAST.This _) = return () -- TODO How to resolve this
-traverseExpr (TAST.Super _) = return () -- TODO How to resolve super
+traverseExpr (TAST.This _) = return () 
+traverseExpr (TAST.Super _) = return ()
 traverseExpr (TAST.LocalVar ftype fname) = do
     return ()
 traverseExpr (TAST.ClassRef ctype cname) = do
@@ -291,7 +286,7 @@ traverseExpr (TAST.StmtOrExprAsExpr stmtOrExpr) = traverseStmtOrExpr stmtOrExpr
 traverseStmtOrExpr :: TAST.StmtOrExpr -> ConstantPoolState ()
 traverseStmtOrExpr (TAST.LocalAssign _ _ expr) = do
     trace "Debug Traverse Assign" $ traverseExpr expr
-    (return ()) -- TODO Need to be checked
+    (return ()) 
 traverseStmtOrExpr (TAST.FieldAssign ftype maybeExpr cname _ fname expr) = do
     cIdx <- insertClassInfo cname
     n <- insertUtf8 fname
@@ -313,7 +308,7 @@ traverseStmtOrExpr (TAST.FieldAssign ftype maybeExpr cname _ fname expr) = do
                 , desc = ""
                 }
     trace ("Debug Traverse Assign at index: " ++ show i) $ traverseExpr expr
-    traverseExpr maybeExpr -- TODO Need to be checked
+    traverseExpr maybeExpr
     (return ())
 traverseStmtOrExpr (TAST.New _ className exprs) = do
     cIdx <- insertClassInfo className
@@ -338,38 +333,6 @@ traverseStmtOrExpr (TAST.New _ className exprs) = do
             , desc = ""
             }
     mapM_ (traverseExpr . snd) exprs
-
--- traverseStmtOrExpr (Just mreT) (TAST.MethodCall maybeExpr mname args) = do
---  cIdx <- (case maybeExpr of
---       Just expr ->
---         ( case typee expr of
---             (Core.Instance cname) -> insertClassInfo cname
---               return ()
---             (Core.Class cname) -> insertClassInfo cname
---               return ()
---             t -> error ("Cannot make a Method Call on Primitive Type:" ++ show t)
---         )
---       Nothing -> error "Method cannot be called without a class" -- TODO What to do here? In this case the Method should be called on this)
---       )
---   nIdx <- insertUtf8 mname
---   tIdx <- insertUtf8 (constructDescriptor mreT (map fst args))
---   ntIdx <-
---     insertEntry
---       CF.NameAndType_Info
---         { tag_cp = CF.TagNameAndType,
---           index_name_cp = nIdx,
---           index_descr_cp = tIdx,
---           desc = ""
---         }
---   insertEntry
---     CF.MethodRef_Info
---       { tag_cp = CF.TagMethodRef,
---         index_name_cp = cIdx,
---         index_nameandtype_cp = ntIdx,
---         desc = ""
---       }
---
--- mapM_ (traverseExpr . snd) args
 
 traverseStmtOrExpr (TAST.MethodCall mreT expr cname isStatic mname args) = do
     cIdx <- insertClassInfo cname
@@ -398,11 +361,12 @@ traverseLit :: TAST.Literal -> ConstantPoolState Int
 traverseLit (TAST.IntLit i) = insertInt (fromIntegral i)
 traverseLit (TAST.CharLit c) = insertInt (fromIntegral $ fromEnum c)
 traverseLit (TAST.BoolLit b) = insertInt (if b then 1 else 0)
-traverseLit TAST.Null = error "Null can not be pushed on the constant Pool"
+traverseLit TAST.Null = do 
+  return (-9999999)
 
 {-
-  Searching in Constant Pool
-  -}
+  Searching in  the Constant Pool Constant Pool
+-}
 isMatchingUtf8 :: String -> CF.CP_Info -> Bool
 isMatchingUtf8 str (Utf8_Info _ _ str1 _) = str == str1
 isMatchingUtf8 _ _ = False
@@ -475,84 +439,11 @@ findMethodCall' m@(TAST.MethodCall mRet maybeExpr cname isStatic mname args) = d
             mref
 findMethodCall' _ = error "It is not possible to find a Method entry for non method entries"
 
-{- findMethodCall' :: TAST.StmtOrExpr -> ConstantPoolState Int
-findMethodCall' m@(TAST.MethodCall mRet maybeExpr cname isStatic mname args) = do
-  let mdesc = constructDescriptor mRet (map fst args)
-  let debug = debugStr [
-                       ("mret", mRet)]
-  tIdx <- findUtf8' mdesc
-  nIdx <- findUtf8' mname
-  ntIdx <-
-    findEntry
-      ( isNameAndType
-          (getResult "Could not find Matching MethodName in the ConstantPool" nIdx)
-          (getResult "Could not find Matching Descriptor in the ConstantPool" tIdx)
-      )
-
-  cIdx <- findClass' cname
-  mref <- findEntry (findMethodRef (getResult "Could not find NameAndType in the ConstantPool" ntIdx) cIdx)
-  return $ getResult "Could not find MethodRef in the ConstantPool" mref
-findMethodCall' _ = error "It is not possible to find a Method entry for non method entries" -}
 
 findFieldRef :: Int -> Int -> CF.CP_Info -> Bool
 findFieldRef cIdx ntIdx (CF.FieldRef_Info _ pcIdx pntIdx _) = cIdx == pcIdx && ntIdx == pntIdx
 findFieldRef _ _ _ = False
 
-{- findField' :: String -> String -> Type -> ConstantPoolState Int
-findField' cname fname ftype = do
-  let fdesc = fieldDescriptor ftype
-  tIdx <- findUtf8' fdesc
-  nIdx <- findUtf8' fname
-  ntIdx <-
-    findEntry
-      ( isNameAndType
-          (getResult "Could not find Matching MethodName in the ConstantPool" nIdx)
-          (getResult "Could not find Matching Descriptor in the ConstantPool" tIdx)
-      )
-
-  cIdx <- findClass' cname
-  mref <- findEntry (findFieldRef (getResult "Could not find NameAndType in the ConstantPool" ntIdx) cIdx)
-  return $ getResult ("Could not find MethodRef in the ConstantPool with cname:"
-                     ++ ) mref
--- TODO Check
-findField' _ _ _ = error "It is not possible to find a Method entry for non method entries"
-
-findConstructor' :: String -> [Core.Type] -> ConstantPoolState Int
-findConstructor' cname params = do
-  let mdesc = constructDescriptor Core.Void params
-  tIdx <- findUtf8' mdesc
-  nIdx <- findUtf8' "<init>"
-  ntIdx <-
-    findEntry
-      ( isNameAndType
-          (getResult "Could not find Matching MethodName in the ConstantPool" nIdx)
-          (getResult "Could not find Matching Descriptor in the ConstantPool" tIdx)
-      )
-
-  cIdx <- findClass' cname
-  mref <- findEntry (findMethodRef (getResult "Could not find NameAndType in the ConstantPool" ntIdx) cIdx)
-  return $ getResult "Could not find MethodRef in the ConstantPool" mref
-
-findLiteral' :: TAST.Literal -> ConstantPoolState Int
-findLiteral' = traverseLit
-
-findName' :: String -> ConstantPoolState Int
-findName' str = do
-  i <- findUtf8' str
-  return $ getResult "Could not find Name in the ConstantPool" $ i
-
-findDesc' :: TAST.Method -> ConstantPoolState Int
-findDesc' m = do
-  i <- findUtf8' $ methodDescriptor m
-
-  return $ getResult "Could not find Descriptor in the ConstantPool" $ i
-
-findAnyDesc' :: Core.Type -> [Core.Type] -> ConstantPoolState Int
-findAnyDesc' mRet mPar = do
-  let desc = constructDescriptor mRet mPar
-  i <- findUtf8' $ desc
-
-  return $ getResult "Could not find Descriptor in the ConstantPool" $ i -}
 
 findField' :: String -> String -> Type -> ConstantPoolState Int
 findField' cname fname ftype = do
@@ -627,7 +518,7 @@ data SearchFunctions = Func
 
 buildConstantPool :: TAST.Class -> ConstantPoolState ()
 buildConstantPool c@(TAST.Class _ cname _ cfields cmethods cconstructors) = do
-    codeIdx <- trace "Test" $ insertUtf8 "Code"
+    codeIdx <- insertUtf8 "Code"
     cIdx <- insertClass c
     mapM_ (insertConstructor cIdx) cconstructors
     mapM_ (insertField cIdx) cfields
